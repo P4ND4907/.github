@@ -1,0 +1,37 @@
+name: Suggestion
+description: Propose a feature, cleanup, workflow improvement, or product idea.
+title: "[Suggestion]: "
+labels: ["suggestion", "needs-triage"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What should change?
+      description: Describe the idea or improvement.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why would this help?
+      description: Explain the user problem, workflow, or product value.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Product/UI
+        - Safety/privacy
+        - Setup/docs
+        - Performance/reliability
+        - Automation/workflow
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes, examples, or links
+      description: Avoid private data and secrets.

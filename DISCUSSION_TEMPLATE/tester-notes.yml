@@ -1,0 +1,18 @@
+title: "Tester notes: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for open-ended tester notes. Do not share secrets, account credentials, private data, or payment details.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: What did you try, what worked, and what should change?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestions
+    attributes:
+      label: Suggestions
+      description: Product, docs, safety, or workflow ideas.

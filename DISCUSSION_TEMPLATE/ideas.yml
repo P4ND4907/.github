@@ -1,0 +1,14 @@
+title: "Idea: "
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What should exist, change, or be explored?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why it matters
+      description: Who would it help and how?

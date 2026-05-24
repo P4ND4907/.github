@@ -1,0 +1,55 @@
+name: Bug report
+description: Report something broken, confusing, or not working as expected.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing. Remove secrets, tokens, private data, payment info, customer data, and real account details before posting.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the bug in a few clear sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Safety impact
+      options:
+        - None noticed
+        - Data loss or file deletion
+        - Money, trading, payment, or billing risk
+        - Account, email, browser, or message-writing risk
+        - Device, driver, audio, or hardware risk
+        - Privacy, secrets, or customer data risk
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: Windows 11, Chrome 126, app version, commit, or branch
+  - type: textarea
+    id: notes
+    attributes:
+      label: Extra notes or screenshots
+      description: Remove sensitive values before attaching anything.

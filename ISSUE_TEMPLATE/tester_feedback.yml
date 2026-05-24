@@ -1,0 +1,49 @@
+name: Tester feedback
+description: Share notes from trying a project, demo, workflow, or feature.
+title: "[Tester feedback]: "
+labels: ["tester-feedback", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Tester notes are welcome. Please do not include secrets, private data, payment details, or real account credentials.
+  - type: input
+    id: project_area
+    attributes:
+      label: Project area
+      placeholder: "Example: onboarding, dashboard, audio self-test, trading replay, route screen"
+    validations:
+      required: true
+  - type: textarea
+    id: what_worked
+    attributes:
+      label: What worked well?
+    validations:
+      required: true
+  - type: textarea
+    id: what_confused
+    attributes:
+      label: What was confusing, slow, risky, or annoying?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested improvement
+      description: A rough idea is fine.
+  - type: dropdown
+    id: priority
+    attributes:
+      label: How important did this feel?
+      options:
+        - Nice-to-have
+        - Important
+        - Blocking
+        - Safety/privacy concern
+    validations:
+      required: true
+  - type: input
+    id: tester_context
+    attributes:
+      label: Tester context
+      placeholder: Device, OS, browser, headphones, workflow type, or role

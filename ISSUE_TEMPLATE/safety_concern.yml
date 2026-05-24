@@ -1,0 +1,39 @@
+name: Safety or privacy concern
+description: Report risky behavior that is not a private security vulnerability.
+title: "[Safety]: "
+labels: ["safety", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, exploit steps, credentials, private logs, private screenshots, payment info, or customer data. For private vulnerabilities, use SECURITY.md instead.
+  - type: dropdown
+    id: risk_type
+    attributes:
+      label: Risk type
+      options:
+        - Money, trading, payment, or billing
+        - Account, email, browser, social, or message writing
+        - File deletion, data loss, or destructive command
+        - Device, driver, audio, robot, or hardware control
+        - Privacy, logging, screenshots, or sensitive data
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: concern
+    attributes:
+      label: What is the concern?
+      description: Explain the risky behavior without exposing sensitive details.
+    validations:
+      required: true
+  - type: textarea
+    id: safer_default
+    attributes:
+      label: Safer default or suggestion
+      description: "Example: dry run, paper mode, confirmation dialog, local-only mode, permissions warning."
+  - type: input
+    id: context
+    attributes:
+      label: Context
+      placeholder: Repo, screen, workflow, branch, or commit

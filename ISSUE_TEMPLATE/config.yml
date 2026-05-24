@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security or private vulnerability report
+    url: https://github.com/P4ND4907/.github/blob/main/SECURITY.md
+    about: Do not post secrets, exploit details, private data, or account credentials in public issues.
+  - name: Project catalog and status
+    url: https://github.com/P4ND4907/P4ND4907/blob/main/PROJECTS.md
+    about: Check whether a repo is active, supporting, archived, or unfinished.
