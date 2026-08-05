@@ -124,6 +124,14 @@ export interface MatchPlayer {
   firingTime: number
   /** Seconds with no progress toward target — triggers unstuck repath */
   stuckTime: number
+  /** Stick to current path — stops slingshot repathing */
+  commitTime: number
+  /** Locked engagement target id */
+  aimTargetId: string | null
+  /** Seconds spent acquiring the current aim target */
+  aimTime: number
+  /** Seconds until next shot allowed */
+  fireCooldown: number
 }
 
 export interface MatchState {

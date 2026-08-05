@@ -59,7 +59,7 @@ export function TacticalMap({
     const frame = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
-      const follow = 1 - Math.exp(-14 * dt)
+      const follow = 1 - Math.exp(-8 * dt)
 
       const targets = targetRef.current
       const rendered = renderRef.current

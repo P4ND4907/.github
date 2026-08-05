@@ -192,7 +192,6 @@
 }
 
 .pawn {
-  transition: transform 220ms linear;
   will-change: transform;
 }
 

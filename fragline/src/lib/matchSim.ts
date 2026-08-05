@@ -91,6 +91,10 @@ function spawnPlayer(
     | 'hp'
     | 'firingTime'
     | 'stuckTime'
+    | 'commitTime'
+    | 'aimTargetId'
+    | 'aimTime'
+    | 'fireCooldown'
   >,
   zoneId: string,
 ): MatchPlayer {
@@ -109,6 +113,10 @@ function spawnPlayer(
     orderedTime: 0,
     firingTime: 0,
     stuckTime: 0,
+    commitTime: 0.5 + Math.random() * 1.2,
+    aimTargetId: null,
+    aimTime: 0,
+    fireCooldown: 0.3 + Math.random() * 0.5,
   }
 }
 
@@ -252,16 +260,29 @@ function assignRoamPath(
 
   const world = pathToWorld(cells.slice(1))
   if (!world.length) {
-    return { ...p, waypoints: [], targetX: p.x, targetY: p.y, orderedTime }
+    return {
+      ...p,
+      waypoints: [],
+      targetX: p.x,
+      targetY: p.y,
+      orderedTime,
+      commitTime: Math.max(p.commitTime, 1.2),
+    }
   }
 
   const [first, ...rest] = world
+  // Commit longer on longer routes so they finish the push
+  const commit = Math.min(5.5, 1.8 + world.length * 0.22)
   return {
     ...p,
     waypoints: rest,
     targetX: first.x,
     targetY: first.y,
     orderedTime,
+    commitTime: orderedTime > 0 ? Math.max(orderedTime, commit) : commit,
+    // Clear aim when committing to a new move (unless mid-order peek)
+    aimTargetId: orderedTime > 0 ? p.aimTargetId : null,
+    aimTime: orderedTime > 0 ? p.aimTime : 0,
   }
 }
 
@@ -445,45 +466,73 @@ function retarget(
 ): MatchPlayer {
   if (!p.alive) return p
 
-  // Force repath when jammed — don't sit on a dead waypoint list
-  if (p.stuckTime > 0.45 && p.orderedTime <= 0) {
-    const from = worldToCell(p.x, p.y)
-    const escape = randomOpenCell(map, from, 5)
-    return { ...assignRoamPath(map, p, escape), stuckTime: 0 }
+  let next = {
+    ...p,
+    commitTime: Math.max(0, (p.commitTime ?? 0) - dt),
+    fireCooldown: Math.max(0, (p.fireCooldown ?? 0) - dt),
   }
 
-  if (p.orderedTime > 0) {
-    return { ...p, orderedTime: Math.max(0, p.orderedTime - dt) }
+  // Engaging a visible foe — hold the angle, don't slingshot away
+  const engageRange = 24 + buffs.utility * 3
+  const visibleFoe = (foes ?? []).find(
+    (f) =>
+      f.alive &&
+      Math.hypot(f.x - next.x, f.y - next.y) < engageRange &&
+      hasLineOfSight(map, next.x, next.y, f.x, f.y),
+  )
+  if (visibleFoe) {
+    return {
+      ...next,
+      // Stay put / crawl while aiming
+      waypoints: [],
+      targetX: next.x,
+      targetY: next.y,
+      commitTime: Math.max(next.commitTime, 0.8),
+      aimTargetId: visibleFoe.id,
+      aimTime: (next.aimTargetId === visibleFoe.id ? next.aimTime : 0) + dt,
+    }
   }
 
-  if (p.waypoints.length > 0 && p.stuckTime < 0.35) return p
+  // Lost LOS — clear aim lock
+  if (next.aimTargetId) {
+    next = { ...next, aimTargetId: null, aimTime: 0 }
+  }
 
-  const dist = Math.hypot(p.targetX - p.x, p.targetY - p.y)
-  if (dist > 1.2 && p.stuckTime < 0.35) return p
+  // Forced unstuck only
+  if (next.stuckTime > 0.7 && next.orderedTime <= 0) {
+    const from = worldToCell(next.x, next.y)
+    const escape = randomOpenCell(map, from, 4)
+    return { ...assignRoamPath(map, next, escape), stuckTime: 0 }
+  }
 
-  const repathRate = (0.65 - buffs.intelligence * 0.03 + mapFam * 0.001) * dt
-  const huntBoost =
-    foes?.some(
-      (f) =>
-        f.alive &&
-        Math.hypot(f.x - p.x, f.y - p.y) < 28 &&
-        hasLineOfSight(map, p.x, p.y, f.x, f.y),
-    )
-      ? 0.45
-      : 0
-  if (Math.random() > Math.max(0.12, repathRate + huntBoost * dt)) return p
+  if (next.orderedTime > 0) {
+    return { ...next, orderedTime: Math.max(0, next.orderedTime - dt) }
+  }
+
+  // Still committed to current route
+  if (next.commitTime > 0 && (next.waypoints.length > 0 || Math.hypot(next.targetX - next.x, next.targetY - next.y) > 1.5)) {
+    return next
+  }
+
+  // Arrived / idle — occasional deliberate repath (not every tick)
+  const arriveDist = Math.hypot(next.targetX - next.x, next.targetY - next.y)
+  if (arriveDist > 1.4 || next.waypoints.length > 0) return next
+
+  // ~1 repath every 2.5–4s once settled
+  const repathChance = (0.28 + buffs.intelligence * 0.02 + mapFam * 0.001) * dt
+  if (Math.random() > repathChance) return next
 
   return assignRoamPath(
     map,
-    p,
-    pickDestination(map, p, winChance, buffs, foes, allies, mapFam),
+    next,
+    pickDestination(map, next, winChance, buffs, foes, allies, mapFam),
   )
 }
 
 function advanceWaypoints(p: MatchPlayer): MatchPlayer {
   if (!p.alive) return p
   const dist = Math.hypot(p.targetX - p.x, p.targetY - p.y)
-  if (dist > 0.85) return p
+  if (dist > 1.1) return p
   if (!p.waypoints.length) return p
   const [next, ...rest] = p.waypoints
   return { ...p, waypoints: rest, targetX: next.x, targetY: next.y }
@@ -492,14 +541,21 @@ function advanceWaypoints(p: MatchPlayer): MatchPlayer {
 /** units per second in map space */
 function moveToward(p: MatchPlayer, teamSpeed: number, dt: number): MatchPlayer {
   if (!p.alive) return p
-  let stepped = p
-  for (let i = 0; i < 3; i++) {
-    stepped = advanceWaypoints(stepped)
+  // Freeze locomotion while aiming / firing
+  if (p.aimTargetId || p.firingTime > 0.05) {
+    return {
+      ...p,
+      waypoints: [],
+      targetX: p.x,
+      targetY: p.y,
+    }
   }
+
+  let stepped = advanceWaypoints(p)
   const dx = stepped.targetX - stepped.x
   const dy = stepped.targetY - stepped.y
   const dist = Math.hypot(dx, dy)
-  if (dist < 0.15) return stepped
+  if (dist < 0.2) return stepped
   const speed = teamSpeed * p.speed
   const step = Math.min(speed * dt, dist)
   return {
@@ -509,7 +565,7 @@ function moveToward(p: MatchPlayer, teamSpeed: number, dt: number): MatchPlayer 
   }
 }
 
-/** Soft body collision — slide past, don't lock into corridor deadlocks */
+/** Soft body collision — gentle slide, avoid jitter while aiming */
 function separatePlayers(map: GameMap, players: MatchPlayer[]): MatchPlayer[] {
   const next = players.map((p) => ({ ...p }))
   for (let i = 0; i < next.length; i++) {
@@ -521,43 +577,45 @@ function separatePlayers(map: GameMap, players: MatchPlayer[]): MatchPlayer[] {
       const d = Math.hypot(dx, dy)
       if (d >= UNIT_SEP || d < 0.01) continue
 
+      // Aiming units barely get shoved — stops slingshot jitter in duels
+      const iAim = !!next[i].aimTargetId
+      const jAim = !!next[j].aimTargetId
       const nx = dx / d
       const ny = dy / d
-      // Weaker push + lateral slide so units slip past each other
-      const push = ((UNIT_SEP - d) / 2) * 0.55
-      const side = 0.35
+      const push = ((UNIT_SEP - d) / 2) * (iAim || jAim ? 0.22 : 0.42)
+      const side = iAim || jAim ? 0.12 : 0.28
       const sx = -ny * side
       const sy = nx * side
 
-      const tryMove = (idx: number, ox: number, oy: number) => {
-        const nx2 = next[idx].x + ox
-        const ny2 = next[idx].y + oy
+      const tryMove = (idx: number, ox: number, oy: number, scale: number) => {
+        const nx2 = next[idx].x + ox * scale
+        const ny2 = next[idx].y + oy * scale
         const cell = worldToCell(nx2, ny2)
         if (isOpenCell(map, cell.col, cell.row)) {
           next[idx].x = nx2
           next[idx].y = ny2
           return true
         }
-        // Try pure lateral if forward push hits wall
-        const lx = next[idx].x + (ox === 0 ? 0 : Math.sign(ox) === Math.sign(sx) ? sx : -sx)
-        const ly = next[idx].y + (oy === 0 ? 0 : Math.sign(oy) === Math.sign(sy) ? sy : -sy)
-        const lc = worldToCell(lx, ly)
-        if (isOpenCell(map, lc.col, lc.row)) {
-          next[idx].x = lx
-          next[idx].y = ly
-          return true
-        }
         return false
       }
 
-      // Unit closer to its goal yields less (keeps priority)
       const di = Math.hypot(next[i].targetX - next[i].x, next[i].targetY - next[i].y)
       const dj = Math.hypot(next[j].targetX - next[j].x, next[j].targetY - next[j].y)
-      const iYield = di < dj ? 0.35 : 0.65
-      const jYield = 1 - iYield
+      const iYield = iAim ? 0.15 : di < dj ? 0.35 : 0.65
+      const jYield = jAim ? 0.15 : 1 - iYield
 
-      tryMove(i, -nx * push * iYield + sx * (i % 2 === 0 ? 1 : -1), -ny * push * iYield + sy * (i % 2 === 0 ? 1 : -1))
-      tryMove(j, nx * push * jYield + sx * (j % 2 === 0 ? 1 : -1), ny * push * jYield + sy * (j % 2 === 0 ? 1 : -1))
+      tryMove(
+        i,
+        -nx * push * iYield + sx * (i % 2 === 0 ? 1 : -1),
+        -ny * push * iYield + sy * (i % 2 === 0 ? 1 : -1),
+        1,
+      )
+      tryMove(
+        j,
+        nx * push * jYield + sx * (j % 2 === 0 ? 1 : -1),
+        ny * push * jYield + sy * (j % 2 === 0 ? 1 : -1),
+        1,
+      )
     }
   }
   return next
@@ -570,13 +628,13 @@ function markStuckProgress(
 ): MatchPlayer[] {
   return after.map((p) => {
     if (!p.alive) return { ...p, stuckTime: 0 }
+    if (p.aimTargetId) return { ...p, stuckTime: 0 }
     const prev = before.find((b) => b.id === p.id)
     if (!prev) return p
     const moved = Math.hypot(p.x - prev.x, p.y - prev.y)
     const needMove =
       Math.hypot(p.targetX - p.x, p.targetY - p.y) > 1.4 || p.waypoints.length > 0
-    if (needMove && moved < 0.12) {
-      // Honor mid-tick repath resets (don't re-accumulate old stuckTime)
+    if (needMove && moved < 0.08) {
       const wasReset =
         (p.stuckTime ?? 0) === 0 && (prev.stuckTime ?? 0) > 0.3
       return {
@@ -600,8 +658,8 @@ export function tickMatch(
     ? buffsWithBrain(buffsFromUpgrades(upgrades), brain)
     : buffsFromUpgrades(upgrades)
   const mapFam = brain ? mapFamiliarity(brain, state.mapId) : 0
-  // Smooth glide speed in map-units / second — larger arenas need more pace
-  const teamSpeed = 14 + buffs.reflex * 2.1
+  // Steady pace — no slingshot sprinting across the arena
+  const teamSpeed = 9.5 + buffs.reflex * 1.4
 
   let timeLeft = state.timeLeft - dt
   let round = state.round
@@ -627,15 +685,14 @@ export function tickMatch(
   players = separatePlayers(map, players)
   players = markStuckProgress(state.players, players, dt)
 
-  // Unstuck pass — clear deadlocks and peel to open ground
+  // Unstuck pass — rarer, only truly jammed movers
   const unstuckNames: string[] = []
   players = players.map((p) => {
-    if (!p.alive || (p.stuckTime ?? 0) < 0.55) return p
+    if (!p.alive || p.aimTargetId || (p.stuckTime ?? 0) < 0.85) return p
+    if (p.orderedTime > 0.2) return p
     const from = worldToCell(p.x, p.y)
-    const escape = randomOpenCell(map, from, 6)
-    const ordered =
-      p.orderedTime > 0.4 ? Math.max(2, p.orderedTime) : 0
-    const next = assignRoamPath(map, p, escape, ordered)
+    const escape = randomOpenCell(map, from, 5)
+    const next = assignRoamPath(map, p, escape)
     unstuckNames.push(p.name)
     return { ...next, stuckTime: 0 }
   })
@@ -760,105 +817,158 @@ export function tickMatch(
     }
   }
 
-  // Skirmish only with clear line of sight (no wall-banging)
-  const fightChance = (0.5 + buffs.utility * 0.07) * dt
-  const fightRange = 28 + buffs.utility * 5
+  // Purposeful gunfights — each unit aims at a locked target, then fires
+  const aimNeeded = Math.max(0.28, 0.55 - buffs.reflex * 0.03)
+  const engageRange = 24 + buffs.utility * 3
+  {
+    const byId = new Map(players.map((p) => [p.id, p]))
+    const shots: {
+      shooterId: string
+      targetId: string
+      dmg: number
+      willKill: boolean
+    }[] = []
 
-  if (Math.random() < fightChance) {
-    const aliveAllies = players.filter((p) => p.alive && p.team === 'ally')
-    const aliveEnemies = players.filter((p) => p.alive && p.team === 'enemy')
-    if (aliveAllies.length && aliveEnemies.length) {
-      // Prefer closest pair that can actually see each other
-      type Pair = { a: (typeof aliveAllies)[0]; e: (typeof aliveEnemies)[0]; d: number }
-      const visible: Pair[] = []
-      for (const ally of aliveAllies) {
-        for (const enemy of aliveEnemies) {
-          const d = Math.hypot(ally.x - enemy.x, ally.y - enemy.y)
-          if (d > fightRange) continue
-          if (!hasLineOfSight(map, ally.x, ally.y, enemy.x, enemy.y)) continue
-          visible.push({ a: ally, e: enemy, d })
-        }
-      }
-      visible.sort((x, y) => x.d - y.d)
-
-      if (visible.length) {
-        const { a, e } = visible[0]
-        const late =
-          timeLeft < 18 || aliveAllies.length + aliveEnemies.length <= 3
-        const clutchBias = late ? buffs.clutch * 3.5 : buffs.clutch * 0.5
-        const combatDelta = (a.combat - e.combat) * 0.45
-        const teamBias = (buffs.power - 1) * 3.5
-        const chance = Math.max(
-          8,
-          Math.min(
-            92,
-            state.winChance * 0.55 + 25 + combatDelta + clutchBias + teamBias,
-          ),
+    for (const shooter of players) {
+      if (!shooter.alive) continue
+      if ((shooter.fireCooldown ?? 0) > 0) continue
+      if (!shooter.aimTargetId || (shooter.aimTime ?? 0) < aimNeeded) continue
+      const target = byId.get(shooter.aimTargetId)
+      if (!target?.alive || target.team === shooter.team) {
+        players = players.map((p) =>
+          p.id === shooter.id ? { ...p, aimTargetId: null, aimTime: 0 } : p,
         )
-        const dmg = 28 + buffs.power * 4 + Math.floor(Math.random() * 18)
-        const allyWins = Math.random() * 100 < chance
-        const shooter = allyWins ? a : e
-        const target = allyWins ? e : a
+        continue
+      }
+      const d = Math.hypot(target.x - shooter.x, target.y - shooter.y)
+      if (d > engageRange + 2 || !hasLineOfSight(map, shooter.x, shooter.y, target.x, target.y)) {
+        players = players.map((p) =>
+          p.id === shooter.id ? { ...p, aimTargetId: null, aimTime: 0 } : p,
+        )
+        continue
+      }
 
-        // Double-check LOS at fire time (positions may have drifted)
-        if (hasLineOfSight(map, shooter.x, shooter.y, target.x, target.y)) {
-          const shotId = `fx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-          const willKill = target.hp - dmg <= 0
-          fx.push({
-            id: `${shotId}_shot`,
-            kind: 'shot',
-            fromX: shooter.x,
-            fromY: shooter.y,
-            toX: target.x,
-            toY: target.y,
-            team: shooter.team,
-            life: 0.28,
-            maxLife: 0.28,
-          })
-          fx.push({
-            id: `${shotId}_hit`,
-            kind: willKill ? 'kill' : 'hit',
-            fromX: shooter.x,
-            fromY: shooter.y,
-            toX: target.x,
-            toY: target.y,
-            team: shooter.team,
-            life: willKill ? 0.55 : 0.35,
-            maxLife: willKill ? 0.55 : 0.35,
-          })
+      const late = timeLeft < 18 || players.filter((p) => p.alive).length <= 4
+      const clutchBias = late ? buffs.clutch * 2.5 : buffs.clutch * 0.4
+      const combatDelta = (shooter.combat - target.combat) * 0.4
+      const teamBias =
+        shooter.team === 'ally' ? (buffs.power - 1) * 3 : -(buffs.power - 1) * 1.5
+      const hitChance = Math.max(
+        28,
+        Math.min(
+          88,
+          52 + combatDelta + clutchBias + teamBias + (shooter.aimTime - aimNeeded) * 12,
+        ),
+      )
+      const hit = Math.random() * 100 < hitChance
+      if (!hit) {
+        // Miss — reset aim a bit, still show a tracer past the target
+        const overshoot = 4 + Math.random() * 6
+        const ang = Math.atan2(target.y - shooter.y, target.x - shooter.x)
+        const missX = target.x + Math.cos(ang) * overshoot + (Math.random() * 6 - 3)
+        const missY = target.y + Math.sin(ang) * overshoot + (Math.random() * 6 - 3)
+        const shotId = `fx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+        fx.push({
+          id: `${shotId}_shot`,
+          kind: 'shot',
+          fromX: shooter.x,
+          fromY: shooter.y,
+          toX: missX,
+          toY: missY,
+          team: shooter.team,
+          life: 0.22,
+          maxLife: 0.22,
+        })
+        players = players.map((p) =>
+          p.id === shooter.id
+            ? {
+                ...p,
+                firingTime: 0.18,
+                fireCooldown: 0.55 + Math.random() * 0.25,
+                aimTime: aimNeeded * 0.35,
+              }
+            : p,
+        )
+        events.push(`${shooter.name} missed ${target.name}`)
+        continue
+      }
 
-          players = players.map((p) =>
-            p.id === shooter.id ? { ...p, firingTime: 0.22 } : p,
-          )
+      const dmg = 22 + buffs.power * 3 + Math.floor(Math.random() * 14)
+      shots.push({
+        shooterId: shooter.id,
+        targetId: target.id,
+        dmg,
+        willKill: target.hp - dmg <= 0,
+      })
+    }
 
-          const newHp = target.hp - dmg
-          if (newHp <= 0) {
-            players = players.map((p) =>
-              p.id === target.id ? { ...p, alive: false, hp: 0 } : p,
-            )
-            events.push(`${shooter.name} fragged ${target.name}`)
-            if (shooter.team === 'ally') {
-              fragStreak += 1
-              peakStreak = Math.max(peakStreak, fragStreak)
-              const streakBonus = fragStreak >= 3 ? 900 * fragStreak : 0
-              const payout = 1200 + dmg * 18 + streakBonus
-              pendingCash += payout
-              pendingXp += 2.5 + fragStreak * 0.6
-              events.push(
-                fragStreak >= 2
-                  ? `+$${Math.round(payout / 100) / 10}K · ${fragStreak}x streak`
-                  : `+$${Math.round(payout / 100) / 10}K frag`,
-              )
-            } else {
-              fragStreak = 0
-            }
-          } else {
-            players = players.map((p) =>
-              p.id === target.id ? { ...p, hp: newHp } : p,
-            )
-            events.push(`${shooter.name} hit ${target.name} (−${dmg})`)
+    for (const shot of shots) {
+      const shooter = players.find((p) => p.id === shot.shooterId)
+      const target = players.find((p) => p.id === shot.targetId)
+      if (!shooter?.alive || !target?.alive) continue
+
+      const shotId = `fx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+      fx.push({
+        id: `${shotId}_shot`,
+        kind: 'shot',
+        fromX: shooter.x,
+        fromY: shooter.y,
+        toX: target.x,
+        toY: target.y,
+        team: shooter.team,
+        life: 0.26,
+        maxLife: 0.26,
+      })
+      fx.push({
+        id: `${shotId}_hit`,
+        kind: shot.willKill ? 'kill' : 'hit',
+        fromX: shooter.x,
+        fromY: shooter.y,
+        toX: target.x,
+        toY: target.y,
+        team: shooter.team,
+        life: shot.willKill ? 0.5 : 0.32,
+        maxLife: shot.willKill ? 0.5 : 0.32,
+      })
+
+      players = players.map((p) => {
+        if (p.id === shooter.id) {
+          return {
+            ...p,
+            firingTime: 0.2,
+            fireCooldown: 0.65 + Math.random() * 0.3,
+            aimTime: 0,
+            // Keep lock if target survives for follow-up
+            aimTargetId: shot.willKill ? null : p.aimTargetId,
           }
         }
+        if (p.id === target.id) {
+          const hp = p.hp - shot.dmg
+          if (hp <= 0) return { ...p, alive: false, hp: 0, aimTargetId: null, aimTime: 0 }
+          return { ...p, hp }
+        }
+        return p
+      })
+
+      if (shot.willKill) {
+        events.push(`${shooter.name} fragged ${target.name}`)
+        if (shooter.team === 'ally') {
+          fragStreak += 1
+          peakStreak = Math.max(peakStreak, fragStreak)
+          const streakBonus = fragStreak >= 3 ? 900 * fragStreak : 0
+          const payout = 1200 + shot.dmg * 18 + streakBonus
+          pendingCash += payout
+          pendingXp += 2.5 + fragStreak * 0.6
+          events.push(
+            fragStreak >= 2
+              ? `+$${Math.round(payout / 100) / 10}K · ${fragStreak}x streak`
+              : `+$${Math.round(payout / 100) / 10}K frag`,
+          )
+        } else {
+          fragStreak = 0
+        }
+      } else {
+        events.push(`${shooter.name} hit ${target.name} (−${shot.dmg})`)
       }
     }
   }
@@ -1021,6 +1131,10 @@ export function idlePreviewPlayers(map: GameMap): MatchPlayer[] {
       orderedTime: 0,
       firingTime: 0,
       stuckTime: 0,
+      commitTime: 0,
+      aimTargetId: null,
+      aimTime: 0,
+      fireCooldown: 0,
     }
   }
   return [
