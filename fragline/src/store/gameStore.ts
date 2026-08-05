@@ -32,7 +32,7 @@ const DEFAULT_UPGRADES: Upgrade[] = [
   {
     id: 'intelligence',
     name: 'Intelligence',
-    blurb: 'Smarter routes — free-roam paths stick to the plan',
+    blurb: 'Spots enemy claymores more often — % chance scales with level',
     icon: '◎',
     level: 1,
     powerPerLevel: 1,
@@ -42,7 +42,7 @@ const DEFAULT_UPGRADES: Upgrade[] = [
   {
     id: 'strategy',
     name: 'Strategy',
-    blurb: 'Better site calls — push/hold timing & round IQ',
+    blurb: 'Hold angles & flanks — smarter site timing',
     icon: '▣',
     level: 1,
     powerPerLevel: 2,
@@ -62,7 +62,7 @@ const DEFAULT_UPGRADES: Upgrade[] = [
   {
     id: 'utility',
     name: 'Utility',
-    blurb: 'Longer fight range & more skirmishes',
+    blurb: 'More claymores & frags — bigger nade blasts',
     icon: '◌',
     level: 1,
     powerPerLevel: 1,

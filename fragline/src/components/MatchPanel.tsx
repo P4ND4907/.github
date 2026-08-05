@@ -116,6 +116,7 @@ export function MatchPanel() {
           selectedUnitId={match.selectedUnitId}
           orderMarker={match.orderMarker}
           fx={match.fx}
+          gadgets={match.gadgets ?? []}
           onSelectUnit={selectMatchUnit}
           onCommandMove={commandSelectedUnit}
         />

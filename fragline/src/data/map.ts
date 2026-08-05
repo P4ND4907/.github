@@ -19,7 +19,7 @@ export interface GameMap {
   id: string
   name: string
   accent: string
-  /** 10×10: true = wall */
+  size: number
   grid: boolean[][]
   blocks: MapBlock[]
   zones: MapZone[]
@@ -30,6 +30,7 @@ export interface GameMap {
   allyHold: string[]
   enemyPush: string[]
   enemyHold: string[]
+  flankZones: string[]
 }
 
 export interface GridPoint {
@@ -37,12 +38,25 @@ export interface GridPoint {
   row: number
 }
 
-const PAWN_R = 2.0
-const CELL = 10
-const GRID = 10
+const PAWN_R = 2.2
+export const CELL = 10
+export const GRID = 16
+export const WORLD = GRID * CELL
+/** Soft radius — units can't occupy the same space */
+export const UNIT_SEP = 6.2
 
 function cellCenter(col: number, row: number) {
   return { x: col * CELL + CELL / 2, y: row * CELL + CELL / 2 }
+}
+
+function normalizeRows(rows: string[]): string[] {
+  return rows.map((r, i) => {
+    let s = r.replace(/[^.#]/g, '')
+    if (s.length > GRID) s = s.slice(0, GRID)
+    while (s.length < GRID) s += '#'
+    if (s.length !== GRID) throw new Error(`Row ${i} len ${s.length}`)
+    return s
+  })
 }
 
 function fromGrid(
@@ -59,28 +73,28 @@ function fromGrid(
     allyHold: string[]
     enemyPush: string[]
     enemyHold: string[]
+    flankZones: string[]
   },
 ): GameMap {
-  if (meta.rows.length !== GRID || meta.rows.some((r) => r.length !== GRID)) {
-    throw new Error(`Bad grid for ${meta.id}`)
-  }
+  const rows = normalizeRows(meta.rows)
+  if (rows.length !== GRID) throw new Error(`Bad row count ${meta.id}`)
 
-  const grid = meta.rows.map((row) => [...row].map((ch) => ch === '#'))
+  const grid = rows.map((row) => [...row].map((ch) => ch === '#'))
   const blocks: MapBlock[] = [
-    { x: 0, y: 0, w: 100, h: 2.5 },
-    { x: 0, y: 97.5, w: 100, h: 2.5 },
-    { x: 0, y: 0, w: 2.5, h: 100 },
-    { x: 97.5, y: 0, w: 2.5, h: 100 },
+    { x: 0, y: 0, w: WORLD, h: 2 },
+    { x: 0, y: WORLD - 2, w: WORLD, h: 2 },
+    { x: 0, y: 0, w: 2, h: WORLD },
+    { x: WORLD - 2, y: 0, w: 2, h: WORLD },
   ]
 
   for (let r = 0; r < GRID; r++) {
     for (let c = 0; c < GRID; c++) {
       if (!grid[r][c]) continue
       blocks.push({
-        x: c * CELL + 0.35,
-        y: r * CELL + 0.35,
-        w: CELL - 0.7,
-        h: CELL - 0.7,
+        x: c * CELL + 0.45,
+        y: r * CELL + 0.45,
+        w: CELL - 0.9,
+        h: CELL - 0.9,
       })
     }
   }
@@ -100,6 +114,7 @@ function fromGrid(
     id: meta.id,
     name: meta.name,
     accent: meta.accent,
+    size: WORLD,
     grid,
     blocks,
     zones,
@@ -110,64 +125,89 @@ function fromGrid(
     allyHold: meta.allyHold,
     enemyPush: meta.enemyPush,
     enemyHold: meta.enemyHold,
+    flankZones: meta.flankZones,
   }
 }
 
-/** Open corridors — every zone sits on '.' */
+/** Wide 16×16 layouts — multiple routes + hold angles */
 const DUSTLINE = fromGrid({
   id: 'dustline',
   name: 'DUSTLINE',
   accent: '#3aa0ff',
   rows: [
-    '##########',
-    '#........#',
-    '#.##..##.#',
-    '#.#....#.#',
-    '#...##...#',
-    '#.#....#.#',
-    '#.##..##.#',
-    '#........#',
-    '#..#..#..#',
-    '##########',
+    '################',
+    '#..............#',
+    '#.##..####..##.#',
+    '#.#..........#.#',
+    '#.#.##....##.#.#',
+    '#....##..##....#',
+    '#.##........##.#',
+    '#.#...####...#.#',
+    '#.#...####...#.#',
+    '#.##........##.#',
+    '#....##..##....#',
+    '#.#.##....##.#.#',
+    '#.#..........#.#',
+    '#.##..####..##.#',
+    '#..............#',
+    '################',
   ],
   zones: [
-    { id: 'tspawn', label: 'T Spawn', col: 2, row: 8 },
-    { id: 'ctspawn', label: 'CT Spawn', col: 7, row: 1 },
-    { id: 'mid', label: 'Mid', col: 3, row: 4 },
-    { id: 'xbox', label: 'Xbox', col: 3, row: 5 },
-    { id: 'cat', label: 'Cat', col: 6, row: 3 },
-    { id: 'a_long', label: 'Long', col: 8, row: 7 },
-    { id: 'a_site', label: 'A', col: 8, row: 3, site: 'A' },
-    { id: 'a_short', label: 'Short', col: 6, row: 4 },
-    { id: 'b_tunnels', label: 'Tunnels', col: 1, row: 5 },
-    { id: 'b_site', label: 'B', col: 1, row: 2, site: 'B' },
-    { id: 'b_window', label: 'Window', col: 4, row: 2 },
-    { id: 'doors', label: 'Doors', col: 3, row: 3 },
+    { id: 'tspawn', label: 'T Spawn', col: 3, row: 14 },
+    { id: 'tspawn2', label: 'T Ramp', col: 8, row: 14 },
+    { id: 'tspawn3', label: 'T Side', col: 12, row: 14 },
+    { id: 'ctspawn', label: 'CT Spawn', col: 12, row: 1 },
+    { id: 'ctspawn2', label: 'CT Mid', col: 8, row: 1 },
+    { id: 'ctspawn3', label: 'CT Side', col: 3, row: 1 },
+    { id: 'mid', label: 'Mid', col: 5, row: 8 },
+    { id: 'mid_b', label: 'Mid B', col: 10, row: 8 },
+    { id: 'mid_south', label: 'Mid S', col: 8, row: 10 },
+    { id: 'mid_north', label: 'Mid N', col: 8, row: 5 },
+    { id: 'a_long', label: 'Long', col: 14, row: 12 },
+    { id: 'a_short', label: 'Short', col: 12, row: 8 },
+    { id: 'a_site', label: 'A', col: 14, row: 3, site: 'A' },
+    { id: 'b_tunnels', label: 'Tunnels', col: 1, row: 10 },
+    { id: 'b_site', label: 'B', col: 1, row: 3, site: 'B' },
+    { id: 'b_window', label: 'Window', col: 3, row: 5 },
+    { id: 'cat', label: 'Cat', col: 11, row: 6 },
+    { id: 'doors', label: 'Doors', col: 4, row: 6 },
+    { id: 'flank_l', label: 'L Flank', col: 1, row: 7 },
+    { id: 'flank_r', label: 'R Flank', col: 14, row: 7 },
   ],
   edges: [
-    ['tspawn', 'mid'],
-    ['tspawn', 'a_long'],
+    ['tspawn', 'mid_south'],
+    ['tspawn2', 'mid_south'],
+    ['tspawn3', 'a_long'],
     ['tspawn', 'b_tunnels'],
-    ['mid', 'xbox'],
-    ['xbox', 'cat'],
+    ['mid_south', 'mid'],
+    ['mid_south', 'mid_b'],
+    ['mid', 'mid_north'],
+    ['mid_b', 'mid_north'],
+    ['mid', 'doors'],
+    ['mid_b', 'cat'],
+    ['doors', 'b_window'],
+    ['b_window', 'b_site'],
+    ['b_tunnels', 'b_site'],
+    ['b_tunnels', 'flank_l'],
+    ['flank_l', 'b_site'],
     ['cat', 'a_short'],
     ['a_short', 'a_site'],
     ['a_long', 'a_site'],
-    ['b_tunnels', 'b_site'],
-    ['b_site', 'b_window'],
-    ['b_window', 'doors'],
-    ['doors', 'mid'],
+    ['a_long', 'flank_r'],
+    ['flank_r', 'a_site'],
     ['ctspawn', 'a_site'],
-    ['ctspawn', 'mid'],
-    ['ctspawn', 'b_window'],
-    ['mid', 'a_short'],
+    ['ctspawn2', 'mid_north'],
+    ['ctspawn3', 'b_site'],
+    ['a_site', 'cat'],
+    ['b_site', 'doors'],
   ],
-  allySpawns: ['tspawn', 'mid', 'xbox', 'a_long', 'b_tunnels'],
-  enemySpawns: ['ctspawn', 'a_site', 'b_site', 'cat', 'doors'],
-  allyPush: ['mid', 'cat', 'a_short', 'a_site', 'b_tunnels', 'b_site', 'xbox'],
-  allyHold: ['tspawn', 'mid', 'xbox', 'a_long', 'doors'],
-  enemyHold: ['a_site', 'b_site', 'ctspawn', 'cat', 'doors', 'b_window'],
-  enemyPush: ['mid', 'xbox', 'a_short', 'doors', 'b_tunnels'],
+  allySpawns: ['tspawn', 'tspawn2', 'tspawn3', 'mid_south', 'b_tunnels'],
+  enemySpawns: ['ctspawn', 'ctspawn2', 'ctspawn3', 'a_site', 'b_site'],
+  allyPush: ['mid', 'mid_b', 'a_short', 'a_site', 'b_site', 'flank_l', 'flank_r', 'cat'],
+  allyHold: ['tspawn', 'mid_south', 'doors', 'a_long', 'b_tunnels'],
+  enemyHold: ['a_site', 'b_site', 'ctspawn', 'mid_north', 'cat', 'doors'],
+  enemyPush: ['mid', 'mid_south', 'doors', 'cat', 'flank_l', 'flank_r'],
+  flankZones: ['flank_l', 'flank_r', 'a_long', 'b_tunnels', 'doors', 'cat'],
 })
 
 const NEON_MAZE = fromGrid({
@@ -175,57 +215,69 @@ const NEON_MAZE = fromGrid({
   name: 'NEON MAZE',
   accent: '#2fd67b',
   rows: [
-    '##########',
-    '#.#.#.#..#',
-    '#.#...#..#',
-    '#.###.#..#',
-    '#.....#..#',
-    '###.#.##.#',
-    '#...#....#',
-    '#.###.##.#',
-    '#........#',
-    '##########',
+    '################',
+    '#.#.#.#.#.#.#..#',
+    '#.#...#...#.#..#',
+    '#.###.#.###.#.##',
+    '#.....#.....#..#',
+    '###.#.###.#.##.#',
+    '#...#.....#....#',
+    '#.###.###.###.##',
+    '#.....#.....#..#',
+    '##.###.###.#.#.#',
+    '#.....#...#...##',
+    '#.###.#.###.##.#',
+    '#.#...#.....#..#',
+    '#.#.#.###.#.#..#',
+    '#..............#',
+    '################',
   ],
   zones: [
-    { id: 'tspawn', label: 'South', col: 4, row: 8 },
-    { id: 'ctspawn', label: 'North', col: 8, row: 1 },
-    { id: 'sw', label: 'SW', col: 1, row: 8 },
-    { id: 'se', label: 'SE', col: 8, row: 8 },
+    { id: 'tspawn', label: 'South', col: 7, row: 14 },
+    { id: 'sw', label: 'SW', col: 1, row: 14 },
+    { id: 'se', label: 'SE', col: 14, row: 14 },
+    { id: 'ctspawn', label: 'North', col: 14, row: 1 },
     { id: 'nw', label: 'NW', col: 1, row: 1 },
-    { id: 'ne', label: 'NE', col: 8, row: 2 },
-    { id: 'mid', label: 'Mid', col: 4, row: 4 },
-    { id: 'lane1', label: 'Lane 1', col: 2, row: 4 },
-    { id: 'lane2', label: 'Lane 2', col: 6, row: 6 },
-    { id: 'a_site', label: 'A', col: 8, row: 4, site: 'A' },
+    { id: 'ne', label: 'NE', col: 13, row: 1 },
+    { id: 'mid', label: 'Core', col: 7, row: 8 },
+    { id: 'lane1', label: 'W Lane', col: 3, row: 6 },
+    { id: 'lane2', label: 'E Lane', col: 11, row: 8 },
+    { id: 'cross', label: 'Cross', col: 7, row: 4 },
+    { id: 'a_site', label: 'A', col: 14, row: 4, site: 'A' },
     { id: 'b_site', label: 'B', col: 1, row: 4, site: 'B' },
-    { id: 'cross', label: 'Cross', col: 4, row: 2 },
+    { id: 'flank_l', label: 'L Cut', col: 1, row: 10 },
+    { id: 'flank_r', label: 'R Cut', col: 13, row: 12 },
+    { id: 'hub', label: 'Hub', col: 7, row: 14 },
   ],
   edges: [
+    ['tspawn', 'hub'],
     ['tspawn', 'sw'],
     ['tspawn', 'se'],
-    ['sw', 'b_site'],
-    ['sw', 'lane1'],
-    ['se', 'lane2'],
-    ['se', 'a_site'],
-    ['b_site', 'nw'],
-    ['b_site', 'lane1'],
-    ['a_site', 'ne'],
-    ['a_site', 'lane2'],
+    ['hub', 'mid'],
+    ['sw', 'flank_l'],
+    ['se', 'flank_r'],
+    ['flank_l', 'lane1'],
+    ['flank_r', 'lane2'],
     ['lane1', 'mid'],
     ['lane2', 'mid'],
     ['mid', 'cross'],
     ['cross', 'nw'],
     ['cross', 'ne'],
+    ['lane1', 'b_site'],
+    ['lane2', 'a_site'],
+    ['b_site', 'nw'],
+    ['a_site', 'ne'],
     ['nw', 'ctspawn'],
     ['ne', 'ctspawn'],
     ['ctspawn', 'a_site'],
   ],
-  allySpawns: ['tspawn', 'sw', 'se', 'lane1', 'lane2'],
+  allySpawns: ['tspawn', 'sw', 'se', 'hub', 'lane1'],
   enemySpawns: ['ctspawn', 'nw', 'ne', 'a_site', 'b_site'],
-  allyPush: ['mid', 'lane1', 'lane2', 'a_site', 'b_site', 'cross'],
-  allyHold: ['tspawn', 'sw', 'se', 'lane1'],
-  enemyHold: ['ctspawn', 'a_site', 'b_site', 'nw', 'ne'],
-  enemyPush: ['mid', 'cross', 'lane1', 'lane2'],
+  allyPush: ['mid', 'cross', 'a_site', 'b_site', 'lane1', 'lane2', 'flank_l', 'flank_r'],
+  allyHold: ['tspawn', 'hub', 'sw', 'se', 'lane1'],
+  enemyHold: ['ctspawn', 'a_site', 'b_site', 'cross', 'nw'],
+  enemyPush: ['mid', 'hub', 'lane1', 'lane2', 'flank_l'],
+  flankZones: ['flank_l', 'flank_r', 'lane1', 'lane2', 'hub'],
 })
 
 const SPLIT_YARD = fromGrid({
@@ -233,30 +285,38 @@ const SPLIT_YARD = fromGrid({
   name: 'SPLIT YARD',
   accent: '#ff7a2f',
   rows: [
-    '##########',
-    '#..#..#..#',
-    '#........#',
-    '#.##.##.##',
-    '#.#....#.#',
-    '#.#.##.#.#',
-    '#.#....#.#',
-    '#........#',
-    '#..#..#..#',
-    '##########',
+    '################',
+    '#..#..#..#..#..#',
+    '#..............#',
+    '#.##.##.##.##.##',
+    '#.#..........#.#',
+    '#.#.##....##.#.#',
+    '#.#..........#.#',
+    '#....##..##....#',
+    '#....##..##....#',
+    '#.#..........#.#',
+    '#.#.##....##.#.#',
+    '#.#..........#.#',
+    '#.##.##.##.##.##',
+    '#..............#',
+    '#..#..#..#..#..#',
+    '################',
   ],
   zones: [
-    { id: 'tspawn', label: 'Yard S', col: 4, row: 8 },
-    { id: 'ctspawn', label: 'Yard N', col: 4, row: 1 },
-    { id: 'left_bot', label: 'Left Bot', col: 1, row: 7 },
-    { id: 'right_bot', label: 'Right Bot', col: 8, row: 7 },
-    { id: 'left_mid', label: 'Left Mid', col: 1, row: 4 },
-    { id: 'right_mid', label: 'Right Mid', col: 8, row: 4 },
-    { id: 'left_top', label: 'Left Top', col: 1, row: 2 },
-    { id: 'right_top', label: 'Right Top', col: 8, row: 2 },
-    { id: 'choke', label: 'Choke', col: 4, row: 4 },
-    { id: 'a_site', label: 'A', col: 7, row: 1, site: 'A' },
+    { id: 'tspawn', label: 'Yard S', col: 7, row: 14 },
+    { id: 'left_bot', label: 'L Bot', col: 1, row: 13 },
+    { id: 'right_bot', label: 'R Bot', col: 14, row: 13 },
+    { id: 'choke', label: 'Choke', col: 7, row: 7 },
+    { id: 'left_mid', label: 'L Mid', col: 1, row: 7 },
+    { id: 'right_mid', label: 'R Mid', col: 14, row: 7 },
+    { id: 'connector', label: 'Conn', col: 7, row: 5 },
+    { id: 'left_top', label: 'L Top', col: 1, row: 2 },
+    { id: 'right_top', label: 'R Top', col: 14, row: 2 },
+    { id: 'ctspawn', label: 'Yard N', col: 7, row: 1 },
+    { id: 'a_site', label: 'A', col: 13, row: 1, site: 'A' },
     { id: 'b_site', label: 'B', col: 2, row: 1, site: 'B' },
-    { id: 'connector', label: 'Conn', col: 4, row: 2 },
+    { id: 'flank_l', label: 'L Deep', col: 1, row: 5 },
+    { id: 'flank_r', label: 'R Deep', col: 14, row: 5 },
   ],
   edges: [
     ['tspawn', 'left_bot'],
@@ -264,25 +324,26 @@ const SPLIT_YARD = fromGrid({
     ['tspawn', 'choke'],
     ['left_bot', 'left_mid'],
     ['right_bot', 'right_mid'],
-    ['left_mid', 'left_top'],
-    ['right_mid', 'right_top'],
     ['left_mid', 'choke'],
     ['right_mid', 'choke'],
+    ['left_mid', 'flank_l'],
+    ['right_mid', 'flank_r'],
+    ['flank_l', 'left_top'],
+    ['flank_r', 'right_top'],
     ['choke', 'connector'],
     ['connector', 'ctspawn'],
     ['left_top', 'b_site'],
     ['right_top', 'a_site'],
     ['b_site', 'ctspawn'],
     ['a_site', 'ctspawn'],
-    ['left_top', 'ctspawn'],
-    ['right_top', 'ctspawn'],
   ],
   allySpawns: ['tspawn', 'left_bot', 'right_bot', 'choke', 'left_mid'],
   enemySpawns: ['ctspawn', 'a_site', 'b_site', 'left_top', 'right_top'],
-  allyPush: ['choke', 'connector', 'left_mid', 'right_mid', 'a_site', 'b_site'],
+  allyPush: ['choke', 'connector', 'left_mid', 'right_mid', 'a_site', 'b_site', 'flank_l', 'flank_r'],
   allyHold: ['tspawn', 'left_bot', 'right_bot', 'choke'],
   enemyHold: ['ctspawn', 'a_site', 'b_site', 'connector', 'left_top'],
-  enemyPush: ['choke', 'left_mid', 'right_mid', 'connector'],
+  enemyPush: ['choke', 'left_mid', 'right_mid', 'connector', 'flank_l'],
+  flankZones: ['flank_l', 'flank_r', 'left_mid', 'right_mid'],
 })
 
 const RAMPART = fromGrid({
@@ -290,30 +351,38 @@ const RAMPART = fromGrid({
   name: 'RAMPART',
   accent: '#ffc857',
   rows: [
-    '##########',
-    '#........#',
-    '#.##..##.#',
-    '#.#....#.#',
-    '#...##...#',
-    '#.#....#.#',
-    '#.##..##.#',
-    '#........#',
-    '#...##...#',
-    '##########',
+    '################',
+    '#..............#',
+    '#.##..####..##.#',
+    '#.#..........#.#',
+    '#.#.##....##.#.#',
+    '#....#....#....#',
+    '#.##........##.#',
+    '#.#...####...#.#',
+    '#.#...####...#.#',
+    '#.##........##.#',
+    '#....#....#....#',
+    '#.#.##....##.#.#',
+    '#.#..........#.#',
+    '#.##..####..##.#',
+    '#..............#',
+    '################',
   ],
   zones: [
-    { id: 'tspawn', label: 'Gate', col: 2, row: 8 },
-    { id: 'ctspawn', label: 'Keep', col: 5, row: 1 },
-    { id: 'courtyard', label: 'Court', col: 3, row: 4 },
-    { id: 'west_hall', label: 'West', col: 1, row: 4 },
-    { id: 'east_hall', label: 'East', col: 8, row: 4 },
-    { id: 'sw', label: 'SW', col: 1, row: 7 },
-    { id: 'se', label: 'SE', col: 8, row: 7 },
+    { id: 'tspawn', label: 'Gate', col: 4, row: 14 },
+    { id: 'sw', label: 'SW', col: 1, row: 13 },
+    { id: 'se', label: 'SE', col: 14, row: 13 },
+    { id: 'courtyard', label: 'Court', col: 6, row: 9 },
+    { id: 'west_hall', label: 'West', col: 1, row: 8 },
+    { id: 'east_hall', label: 'East', col: 14, row: 8 },
+    { id: 'bridge', label: 'Bridge', col: 6, row: 5 },
     { id: 'nw', label: 'NW', col: 1, row: 2 },
-    { id: 'ne', label: 'NE', col: 8, row: 2 },
-    { id: 'a_site', label: 'A', col: 8, row: 3, site: 'A' },
+    { id: 'ne', label: 'NE', col: 14, row: 2 },
+    { id: 'ctspawn', label: 'Keep', col: 8, row: 1 },
+    { id: 'a_site', label: 'A', col: 14, row: 3, site: 'A' },
     { id: 'b_site', label: 'B', col: 1, row: 3, site: 'B' },
-    { id: 'bridge', label: 'Bridge', col: 5, row: 3 },
+    { id: 'flank_l', label: 'W Cut', col: 1, row: 5 },
+    { id: 'flank_r', label: 'E Cut', col: 14, row: 5 },
   ],
   edges: [
     ['tspawn', 'sw'],
@@ -323,23 +392,24 @@ const RAMPART = fromGrid({
     ['se', 'east_hall'],
     ['west_hall', 'courtyard'],
     ['east_hall', 'courtyard'],
-    ['west_hall', 'b_site'],
-    ['east_hall', 'a_site'],
+    ['west_hall', 'flank_l'],
+    ['east_hall', 'flank_r'],
+    ['flank_l', 'b_site'],
+    ['flank_r', 'a_site'],
     ['courtyard', 'bridge'],
     ['bridge', 'ctspawn'],
     ['b_site', 'nw'],
     ['a_site', 'ne'],
     ['nw', 'ctspawn'],
     ['ne', 'ctspawn'],
-    ['b_site', 'bridge'],
-    ['a_site', 'bridge'],
   ],
   allySpawns: ['tspawn', 'sw', 'se', 'courtyard', 'west_hall'],
   enemySpawns: ['ctspawn', 'a_site', 'b_site', 'nw', 'ne'],
-  allyPush: ['courtyard', 'bridge', 'west_hall', 'east_hall', 'a_site', 'b_site'],
+  allyPush: ['courtyard', 'bridge', 'west_hall', 'east_hall', 'a_site', 'b_site', 'flank_l', 'flank_r'],
   allyHold: ['tspawn', 'sw', 'se', 'courtyard'],
   enemyHold: ['ctspawn', 'a_site', 'b_site', 'bridge', 'nw'],
   enemyPush: ['courtyard', 'west_hall', 'east_hall', 'bridge'],
+  flankZones: ['flank_l', 'flank_r', 'west_hall', 'east_hall'],
 })
 
 const CANAL = fromGrid({
@@ -347,38 +417,48 @@ const CANAL = fromGrid({
   name: 'CANAL',
   accent: '#6ec8ff',
   rows: [
-    '##########',
-    '#........#',
-    '#..####..#',
-    '#.#....#.#',
-    '#.#.##.#.#',
-    '#.#....#.#',
-    '#.#.####.#',
-    '#........#',
-    '#..#..#..#',
-    '##########',
+    '################',
+    '#..............#',
+    '#..##########..#',
+    '#.#..........#.#',
+    '#.#.##....##.#.#',
+    '#.#..........#.#',
+    '#.#.##....##.#.#',
+    '#.#..........#.#',
+    '#.#..........#.#',
+    '#.#.##....##.#.#',
+    '#.#..........#.#',
+    '#.#.##....##.#.#',
+    '#.#..........#.#',
+    '#..##########..#',
+    '#..............#',
+    '################',
   ],
   zones: [
-    { id: 'tspawn', label: 'Dock', col: 4, row: 8 },
-    { id: 'ctspawn', label: 'Lock', col: 4, row: 1 },
-    { id: 'bend_s', label: 'South Bend', col: 4, row: 7 },
-    { id: 'bend_n', label: 'North Bend', col: 5, row: 3 },
-    { id: 'west_low', label: 'West Low', col: 1, row: 7 },
-    { id: 'east_low', label: 'East Low', col: 8, row: 7 },
-    { id: 'west_high', label: 'West High', col: 1, row: 3 },
-    { id: 'east_high', label: 'East High', col: 8, row: 3 },
-    { id: 'mid', label: 'Basin', col: 3, row: 5 },
-    { id: 'a_site', label: 'A', col: 8, row: 1, site: 'A' },
+    { id: 'tspawn', label: 'Dock', col: 7, row: 14 },
+    { id: 'bend_s', label: 'S Bend', col: 7, row: 12 },
+    { id: 'west_low', label: 'W Low', col: 1, row: 12 },
+    { id: 'east_low', label: 'E Low', col: 14, row: 12 },
+    { id: 'mid', label: 'Basin', col: 7, row: 8 },
+    { id: 'spillway', label: 'Spill', col: 7, row: 5 },
+    { id: 'west_high', label: 'W High', col: 1, row: 3 },
+    { id: 'east_high', label: 'E High', col: 14, row: 3 },
+    { id: 'bend_n', label: 'N Bend', col: 7, row: 3 },
+    { id: 'ctspawn', label: 'Lock', col: 7, row: 1 },
+    { id: 'a_site', label: 'A', col: 14, row: 1, site: 'A' },
     { id: 'b_site', label: 'B', col: 1, row: 1, site: 'B' },
-    { id: 'spillway', label: 'Spill', col: 5, row: 5 },
+    { id: 'flank_l', label: 'W Run', col: 1, row: 7 },
+    { id: 'flank_r', label: 'E Run', col: 14, row: 7 },
   ],
   edges: [
     ['tspawn', 'bend_s'],
     ['bend_s', 'west_low'],
     ['bend_s', 'east_low'],
     ['bend_s', 'mid'],
-    ['west_low', 'west_high'],
-    ['east_low', 'east_high'],
+    ['west_low', 'flank_l'],
+    ['east_low', 'flank_r'],
+    ['flank_l', 'west_high'],
+    ['flank_r', 'east_high'],
     ['mid', 'spillway'],
     ['spillway', 'bend_n'],
     ['west_high', 'b_site'],
@@ -386,17 +466,16 @@ const CANAL = fromGrid({
     ['bend_n', 'ctspawn'],
     ['b_site', 'ctspawn'],
     ['a_site', 'ctspawn'],
-    ['west_high', 'bend_n'],
-    ['east_high', 'bend_n'],
-    ['mid', 'west_low'],
-    ['mid', 'east_low'],
+    ['mid', 'flank_l'],
+    ['mid', 'flank_r'],
   ],
   allySpawns: ['tspawn', 'bend_s', 'west_low', 'east_low', 'mid'],
   enemySpawns: ['ctspawn', 'a_site', 'b_site', 'bend_n', 'west_high'],
-  allyPush: ['mid', 'spillway', 'bend_n', 'a_site', 'b_site', 'west_high'],
+  allyPush: ['mid', 'spillway', 'bend_n', 'a_site', 'b_site', 'flank_l', 'flank_r'],
   allyHold: ['tspawn', 'bend_s', 'west_low', 'east_low'],
   enemyHold: ['ctspawn', 'a_site', 'b_site', 'bend_n', 'spillway'],
-  enemyPush: ['mid', 'spillway', 'west_high', 'east_high'],
+  enemyPush: ['mid', 'spillway', 'flank_l', 'flank_r'],
+  flankZones: ['flank_l', 'flank_r', 'west_low', 'east_low'],
 })
 
 export const MAPS: GameMap[] = [DUSTLINE, NEON_MAZE, SPLIT_YARD, RAMPART, CANAL]
@@ -433,18 +512,13 @@ const DIRS: GridPoint[] = [
   { col: 0, row: -1 },
 ]
 
-/** BFS free-roam path through open cells — routes around walls */
 export function findGridPath(
   map: GameMap,
   from: GridPoint,
   to: GridPoint,
 ): GridPoint[] {
-  if (!isOpenCell(map, from.col, from.row)) {
-    from = nearestOpenCell(map, from.col, from.row)
-  }
-  if (!isOpenCell(map, to.col, to.row)) {
-    to = nearestOpenCell(map, to.col, to.row)
-  }
+  if (!isOpenCell(map, from.col, from.row)) from = nearestOpenCell(map, from.col, from.row)
+  if (!isOpenCell(map, to.col, to.row)) to = nearestOpenCell(map, to.col, to.row)
   if (from.col === to.col && from.row === to.row) return [from]
 
   const key = (c: number, r: number) => `${c},${r}`
@@ -477,27 +551,18 @@ export function findGridPath(
 
 export function nearestOpenCell(map: GameMap, col: number, row: number): GridPoint {
   if (isOpenCell(map, col, row)) return { col, row }
-  for (let rad = 1; rad < 8; rad++) {
+  for (let rad = 1; rad < 12; rad++) {
     for (let dc = -rad; dc <= rad; dc++) {
       for (let dr = -rad; dr <= rad; dr++) {
         if (Math.abs(dc) !== rad && Math.abs(dr) !== rad) continue
-        if (isOpenCell(map, col + dc, row + dr)) {
-          return { col: col + dc, row: row + dr }
-        }
+        if (isOpenCell(map, col + dc, row + dr)) return { col: col + dc, row: row + dr }
       }
-    }
-  }
-  // fallback first open
-  for (let r = 0; r < GRID; r++) {
-    for (let c = 0; c < GRID; c++) {
-      if (isOpenCell(map, c, r)) return { col: c, row: r }
     }
   }
   return { col: 1, row: 1 }
 }
 
-/** Random open cell for roaming (optionally biased toward a region) */
-export function randomOpenCell(map: GameMap, near?: GridPoint, radius = 4): GridPoint {
+export function randomOpenCell(map: GameMap, near?: GridPoint, radius = 5): GridPoint {
   const candidates: GridPoint[] = []
   for (let r = 0; r < GRID; r++) {
     for (let c = 0; c < GRID; c++) {
@@ -518,17 +583,13 @@ export function randomOpenCell(map: GameMap, near?: GridPoint, radius = 4): Grid
 export function pathToWorld(path: GridPoint[]): { x: number; y: number }[] {
   return path.map((p, i) => {
     const { x, y } = cellCenter(p.col, p.row)
-    // Tiny stable offset so stacked units don't fully overlap, no random jump
-    const ox = ((i % 3) - 1) * 0.35
-    const oy = (((i + 1) % 3) - 1) * 0.35
-    return { x: x + ox, y: y + oy }
+    return {
+      x: x + ((i % 3) - 1) * 0.5,
+      y: y + (((i + 1) % 3) - 1) * 0.5,
+    }
   })
 }
 
-/**
- * Grid LOS — ray must only travel through open cells.
- * Samples along the segment so diagonal cuts through wall corners are blocked.
- */
 export function hasLineOfSight(
   map: GameMap,
   x0: number,
@@ -540,23 +601,18 @@ export function hasLineOfSight(
   const dy = y1 - y0
   const dist = Math.hypot(dx, dy)
   if (dist < 0.5) return true
-
-  const steps = Math.max(6, Math.ceil(dist / 2.2))
+  const steps = Math.max(10, Math.ceil(dist / 2))
   for (let i = 0; i <= steps; i++) {
     const t = i / steps
     const x = x0 + dx * t
     const y = y0 + dy * t
     const cell = worldToCell(x, y)
     if (!isOpenCell(map, cell.col, cell.row)) return false
-
-    // Also reject if the sample sits inside a wall block footprint
     for (const b of map.blocks) {
-      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
-        return false
-      }
+      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return false
     }
   }
   return true
 }
 
-export { PAWN_R, CELL, cellCenter }
+export { PAWN_R, cellCenter }

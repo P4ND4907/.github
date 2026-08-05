@@ -73,15 +73,31 @@ export type MatchPhase = 'idle' | 'live' | 'result'
 
 export interface CombatFx {
   id: string
-  kind: 'shot' | 'hit' | 'kill'
+  kind: 'shot' | 'hit' | 'kill' | 'nade' | 'claymore'
   fromX: number
   fromY: number
   toX: number
   toY: number
   team: 'ally' | 'enemy'
-  /** Seconds remaining to display */
   life: number
   maxLife: number
+}
+
+export type GadgetKind = 'claymore' | 'frag' | 'smoke'
+
+export interface Gadget {
+  id: string
+  kind: GadgetKind
+  team: 'ally' | 'enemy'
+  x: number
+  y: number
+  /** Claymore facing angle in radians */
+  facing: number
+  /** Seconds until armed / fuse */
+  fuse: number
+  /** Revealed to the opposing team (intel spot) */
+  spotted: boolean
+  ownerId: string
 }
 
 export interface MatchPlayer {
@@ -126,6 +142,7 @@ export interface MatchState {
   /** World marker for last issued move order */
   orderMarker: { x: number; y: number } | null
   fx: CombatFx[]
+  gadgets: Gadget[]
   /** Cash granted this tick from frags — store drains it */
   pendingCash: number
   /** Ally frag streak this round for dopamine copy */

@@ -6,12 +6,19 @@ import {
   pathToWorld,
   pickRandomMap,
   randomOpenCell,
+  UNIT_SEP,
   worldToCell,
   zoneById,
   type GameMap,
   type GridPoint,
 } from '../data/map'
-import { playerPower } from './players'
+import {
+  isGoodAngleHold,
+  placeClaymore,
+  throwFrag,
+  tickGadgets,
+  trySpotClaymores,
+} from './gadgets'
 import type { CombatFx, MatchPlayer, MatchState, Player, Team, Upgrade } from '../types'
 
 export interface MatchBuffs {
@@ -113,6 +120,7 @@ export function createIdleMatch(excludeMapId?: string | null): MatchState {
     selectedUnitId: null,
     orderMarker: null,
     fx: [],
+    gadgets: [],
     pendingCash: 0,
     fragStreak: 0,
   }
@@ -195,6 +203,7 @@ export function startMatch(
     selectedUnitId: allies[0]?.id ?? null,
     orderMarker: null,
     fx: [],
+    gadgets: [],
     pendingCash: 0,
     fragStreak: 0,
   }
@@ -301,20 +310,50 @@ function pickDestination(
   winChance: number,
   buffs: MatchBuffs,
   foes?: MatchPlayer[],
+  allies?: MatchPlayer[],
 ): GridPoint {
-  // Hunt visible enemies — creates corridor peek engagements
+  // Hold angles when defending — strategy upgrades bias toward cover peeks
+  const wantHold =
+    p.team === 'ally'
+      ? winChance < 48 + buffs.strategy
+      : winChance > 52 - buffs.strategy
+
+  if (wantHold && Math.random() < 0.25 + buffs.strategy * 0.05) {
+    const pool = p.team === 'ally' ? map.allyHold : map.enemyHold
+    const candidates = pool
+      .map((id) => zoneById(map, id))
+      .filter((z) => isGoodAngleHold(map, z.x, z.y))
+    if (candidates.length) {
+      const z = candidates[Math.floor(Math.random() * candidates.length)]
+      return { col: z.col, row: z.row }
+    }
+  }
+
+  // Flank instead of stacking the same lane as a teammate
+  if (allies?.length && Math.random() < 0.3 + buffs.intelligence * 0.04) {
+    const crowded = allies.filter(
+      (a) => a.id !== p.id && a.alive && Math.hypot(a.x - p.x, a.y - p.y) < 14,
+    )
+    if (crowded.length && map.flankZones.length) {
+      const z = zoneById(
+        map,
+        map.flankZones[Math.floor(Math.random() * map.flankZones.length)],
+      )
+      return { col: z.col, row: z.row }
+    }
+  }
+
+  // Hunt visible enemies — approach adjacent cell, don't stack on them
   if (foes?.length) {
     const visible = foes
       .filter((f) => f.alive)
       .map((f) => ({ f, d: Math.hypot(f.x - p.x, f.y - p.y) }))
-      .filter(({ f, d }) => d < 28 && hasLineOfSight(map, p.x, p.y, f.x, f.y))
+      .filter(({ f, d }) => d < 36 && hasLineOfSight(map, p.x, p.y, f.x, f.y))
       .sort((a, b) => a.d - b.d)
-    if (visible.length && Math.random() < 0.55 + buffs.strategy * 0.04) {
+    if (visible.length && Math.random() < 0.45 + buffs.strategy * 0.04) {
       const prey = visible[0].f
       const cell = worldToCell(prey.x, prey.y)
-      // Approach adjacent open cell instead of stacking on top
-      const near = randomOpenCell(map, cell, 2)
-      return near
+      return randomOpenCell(map, cell, 3)
     }
   }
 
@@ -340,7 +379,7 @@ function pickDestination(
   }
 
   const here = worldToCell(p.x, p.y)
-  const roamRadius = 2 + Math.min(5, Math.floor(buffs.intelligence / 2))
+  const roamRadius = 3 + Math.min(6, Math.floor(buffs.intelligence / 2))
   return randomOpenCell(map, here, roamRadius)
 }
 
@@ -351,6 +390,7 @@ function retarget(
   buffs: MatchBuffs,
   dt: number,
   foes?: MatchPlayer[],
+  allies?: MatchPlayer[],
 ): MatchPlayer {
   if (!p.alive) return p
 
@@ -363,20 +403,23 @@ function retarget(
   const dist = Math.hypot(p.targetX - p.x, p.targetY - p.y)
   if (dist > 1.2) return p
 
-  const repathRate = (0.55 - buffs.intelligence * 0.04) * dt
-  // Chase harder when an enemy is visible
+  const repathRate = (0.5 - buffs.intelligence * 0.035) * dt
   const huntBoost =
     foes?.some(
       (f) =>
         f.alive &&
-        Math.hypot(f.x - p.x, f.y - p.y) < 22 &&
+        Math.hypot(f.x - p.x, f.y - p.y) < 28 &&
         hasLineOfSight(map, p.x, p.y, f.x, f.y),
     )
-      ? 0.35
+      ? 0.3
       : 0
   if (Math.random() > Math.max(0.08, repathRate + huntBoost * dt)) return p
 
-  return assignRoamPath(map, p, pickDestination(map, p, winChance, buffs, foes))
+  return assignRoamPath(
+    map,
+    p,
+    pickDestination(map, p, winChance, buffs, foes, allies),
+  )
 }
 
 function advanceWaypoints(p: MatchPlayer): MatchPlayer {
@@ -388,11 +431,10 @@ function advanceWaypoints(p: MatchPlayer): MatchPlayer {
   return { ...p, waypoints: rest, targetX: next.x, targetY: next.y }
 }
 
-/** units per second in map space (0–100) */
+/** units per second in map space */
 function moveToward(p: MatchPlayer, teamSpeed: number, dt: number): MatchPlayer {
   if (!p.alive) return p
   let stepped = p
-  // Chain a couple waypoint advances if already on top of target
   for (let i = 0; i < 3; i++) {
     stepped = advanceWaypoints(stepped)
   }
@@ -407,6 +449,39 @@ function moveToward(p: MatchPlayer, teamSpeed: number, dt: number): MatchPlayer 
     x: stepped.x + (dx / dist) * step,
     y: stepped.y + (dy / dist) * step,
   }
+}
+
+/** Soft body collision — no rushing through teammates or enemies */
+function separatePlayers(map: GameMap, players: MatchPlayer[]): MatchPlayer[] {
+  const next = players.map((p) => ({ ...p }))
+  for (let i = 0; i < next.length; i++) {
+    if (!next[i].alive) continue
+    for (let j = i + 1; j < next.length; j++) {
+      if (!next[j].alive) continue
+      const dx = next[j].x - next[i].x
+      const dy = next[j].y - next[i].y
+      const d = Math.hypot(dx, dy)
+      if (d >= UNIT_SEP || d < 0.01) continue
+      const push = ((UNIT_SEP - d) / 2) * 0.85
+      const nx = dx / d
+      const ny = dy / d
+      const ax = next[i].x - nx * push
+      const ay = next[i].y - ny * push
+      const bx = next[j].x + nx * push
+      const by = next[j].y + ny * push
+      const ac = worldToCell(ax, ay)
+      const bc = worldToCell(bx, by)
+      if (isOpenCell(map, ac.col, ac.row)) {
+        next[i].x = ax
+        next[i].y = ay
+      }
+      if (isOpenCell(map, bc.col, bc.row)) {
+        next[j].x = bx
+        next[j].y = by
+      }
+    }
+  }
+  return next
 }
 
 export function tickMatch(
@@ -428,8 +503,11 @@ export function tickMatch(
     const foes = state.players.filter(
       (o) => o.team !== p.team && o.alive,
     )
+    const allies = state.players.filter(
+      (o) => o.team === p.team && o.alive && o.id !== p.id,
+    )
     const moved = moveToward(
-      retarget(map, p, state.winChance, buffs, dt, foes),
+      retarget(map, p, state.winChance, buffs, dt, foes, allies),
       teamSpeed,
       dt,
     )
@@ -438,6 +516,9 @@ export function tickMatch(
       firingTime: Math.max(0, moved.firingTime - dt),
     }
   })
+  players = separatePlayers(map, players)
+
+  let gadgets = [...(state.gadgets ?? [])]
   const events = [...state.events]
   let orderMarker = state.orderMarker
   let fx: CombatFx[] = state.fx
@@ -448,14 +529,102 @@ export function tickMatch(
 
   if (orderMarker && state.selectedUnitId) {
     const u = players.find((p) => p.id === state.selectedUnitId)
-    if (u && Math.hypot(u.x - orderMarker.x, u.y - orderMarker.y) < 3.5) {
+    if (u && Math.hypot(u.x - orderMarker.x, u.y - orderMarker.y) < 5) {
       orderMarker = null
     }
   }
 
+  // Gadget AI — claymores on angle holds, frags when enemies stack mid-range
+  const allyUtil = buffs.utility
+  const enemyUtil = Math.max(1, 2.5 - buffs.intelligence * 0.15)
+  for (const p of players) {
+    if (!p.alive) continue
+    const util = p.team === 'ally' ? allyUtil : enemyUtil
+    const clayChance = (0.035 + util * 0.02) * dt
+    const nadeChance = (0.045 + util * 0.025) * dt
+    const holding =
+      Math.hypot(p.x - p.targetX, p.y - p.targetY) < 2.2 &&
+      isGoodAngleHold(map, p.x, p.y)
+
+    if (holding && Math.random() < clayChance) {
+      const g = placeClaymore(map, p, gadgets)
+      if (g) {
+        gadgets = [...gadgets, g]
+        if (p.team === 'ally') events.push(`${p.name} planted claymore`)
+      }
+    }
+
+    if (Math.random() < nadeChance) {
+      const foes = players.filter((o) => o.team !== p.team && o.alive)
+      if (foes.length) {
+        const nearest = foes.reduce((best, f) =>
+          Math.hypot(f.x - p.x, f.y - p.y) <
+          Math.hypot(best.x - p.x, best.y - p.y)
+            ? f
+            : best,
+        )
+        const d = Math.hypot(nearest.x - p.x, nearest.y - p.y)
+        if (d > 12 && d < 48 && hasLineOfSight(map, p.x, p.y, nearest.x, nearest.y)) {
+          const thrown = throwFrag(p, nearest.x, nearest.y)
+          gadgets = [...gadgets, thrown.gadget]
+          fx.push(thrown.fx)
+          events.push(`${p.name} cooked frag`)
+        }
+      }
+    }
+  }
+
+  // Intelligence spots enemy claymores (probability scales with INT level)
+  {
+    const spotted = trySpotClaymores(
+      gadgets,
+      players,
+      buffs.intelligence,
+      'ally',
+      dt,
+    )
+    gadgets = spotted.gadgets
+    events.push(...spotted.events)
+
+    // Enemies have weaker base intel to spot ours
+    const enemySpot = trySpotClaymores(
+      gadgets,
+      players,
+      Math.max(1, 3 - buffs.intelligence * 0.25),
+      'enemy',
+      dt * 0.55,
+    )
+    gadgets = enemySpot.gadgets
+    events.push(...enemySpot.events)
+  }
+
+  // Tick traps + nades — utility buffs blast radius / damage
+  {
+    const result = tickGadgets(
+      map,
+      gadgets,
+      players,
+      { utility: buffs.utility },
+      dt,
+    )
+    gadgets = result.gadgets
+    players = result.players
+    fx = [...fx, ...result.fx]
+    events.push(...result.events)
+    if (result.pendingCash > 0) {
+      fragStreak += 1
+      const payout = result.pendingCash + fragStreak * 350
+      pendingCash += payout
+      events.push(`+$${Math.round(payout / 100) / 10}K gadget`)
+    }
+    if (result.events.some((e) => e.includes('Walked into claymore'))) {
+      fragStreak = 0
+    }
+  }
+
   // Skirmish only with clear line of sight (no wall-banging)
-  const fightChance = (0.7 + buffs.utility * 0.1) * dt
-  const fightRange = 18 + buffs.utility * 3.5
+  const fightChance = (0.55 + buffs.utility * 0.08) * dt
+  const fightRange = 22 + buffs.utility * 4
 
   if (Math.random() < fightChance) {
     const aliveAllies = players.filter((p) => p.alive && p.team === 'ally')
@@ -596,6 +765,7 @@ export function tickMatch(
         result,
         orderMarker: null,
         fx: [],
+        gadgets: [],
         pendingCash: 0,
         fragStreak: 0,
       }
@@ -604,6 +774,7 @@ export function tickMatch(
     timeLeft = 55
     orderMarker = null
     fx = []
+    gadgets = []
     fragStreak = 0
     players = players.map((p, _i, all) => {
       const spawns = p.team === 'ally' ? map.allySpawns : map.enemySpawns
@@ -642,6 +813,7 @@ export function tickMatch(
     events: events.slice(-8),
     orderMarker,
     fx,
+    gadgets,
     pendingCash,
     fragStreak,
   }
@@ -686,5 +858,3 @@ export function idlePreviewPlayers(map: GameMap): MatchPlayer[] {
     ...map.enemySpawns.slice(0, 2).map((id, i) => mk(`preview_e${i}`, 'wait', 'enemy', id)),
   ]
 }
-
-export { playerPower }

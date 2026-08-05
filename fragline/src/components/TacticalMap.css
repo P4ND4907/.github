@@ -233,3 +233,68 @@
 .fx-flame {
   fill: #ff8a3d;
 }
+
+.gadget-claymore .clay-body {
+  fill: rgba(200, 210, 220, 0.85);
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 0.35;
+}
+
+.gadget-claymore.enemy .clay-body {
+  fill: rgba(255, 140, 70, 0.9);
+  stroke: rgba(255, 200, 140, 0.55);
+}
+
+.gadget-claymore.ally .clay-body {
+  fill: rgba(90, 170, 255, 0.9);
+}
+
+.gadget-claymore .clay-cone {
+  stroke: rgba(255, 200, 100, 0.45);
+  stroke-width: 0.7;
+  stroke-dasharray: 1.5 1.2;
+}
+
+.gadget-claymore.armed .clay-cone {
+  stroke: rgba(255, 90, 60, 0.75);
+  animation: fireFlicker 0.6s ease-in-out infinite;
+}
+
+.gadget-frag .frag-body {
+  fill: #3a3f48;
+  stroke: #c8d0dc;
+  stroke-width: 0.4;
+}
+
+.gadget-frag.ally .frag-body {
+  stroke: #7ab8ff;
+}
+
+.gadget-frag.enemy .frag-body {
+  stroke: #ff9a5a;
+}
+
+.gadget-frag .frag-pin {
+  fill: #ffc857;
+}
+
+.fx-nade-ring {
+  fill: none;
+  stroke: rgba(255, 200, 87, 0.7);
+  stroke-width: 0.7;
+}
+
+.fx-nade-core {
+  fill: rgba(255, 140, 40, 0.55);
+}
+
+.fx-clay-blast {
+  fill: rgba(255, 100, 40, 0.35);
+}
+
+.fx-clay-beam {
+  stroke: rgba(255, 180, 80, 0.8);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
