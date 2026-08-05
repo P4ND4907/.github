@@ -71,6 +71,19 @@ export type Screen = 'home' | 'squad' | 'market' | 'career'
 
 export type MatchPhase = 'idle' | 'live' | 'result'
 
+export interface CombatFx {
+  id: string
+  kind: 'shot' | 'hit' | 'kill'
+  fromX: number
+  fromY: number
+  toX: number
+  toY: number
+  team: 'ally' | 'enemy'
+  /** Seconds remaining to display */
+  life: number
+  maxLife: number
+}
+
 export interface MatchPlayer {
   id: string
   /** Links to squad Player.id for allies; null for AI */
@@ -91,6 +104,8 @@ export interface MatchPlayer {
   waypoints: { x: number; y: number }[]
   /** Seconds remaining where AI won't override a manual move order */
   orderedTime: number
+  /** Seconds of muzzle-flash / recoil pose */
+  firingTime: number
 }
 
 export interface MatchState {
@@ -110,6 +125,7 @@ export interface MatchState {
   selectedUnitId: string | null
   /** World marker for last issued move order */
   orderMarker: { x: number; y: number } | null
+  fx: CombatFx[]
 }
 
 export interface GameState {

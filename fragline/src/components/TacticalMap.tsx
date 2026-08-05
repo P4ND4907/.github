@@ -1,6 +1,6 @@
 import { useEffect, useRef, type MouseEvent } from 'react'
 import { getMap } from '../data/map'
-import type { MatchPlayer } from '../types'
+import type { CombatFx, MatchPlayer } from '../types'
 import './TacticalMap.css'
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
   live?: boolean
   selectedUnitId?: string | null
   orderMarker?: { x: number; y: number } | null
+  fx?: CombatFx[]
   interactive?: boolean
   onSelectUnit?: (id: string) => void
   onCommandMove?: (x: number, y: number) => void
@@ -22,6 +23,7 @@ export function TacticalMap({
   live,
   selectedUnitId,
   orderMarker,
+  fx = [],
   interactive,
   onSelectUnit,
   onCommandMove,
@@ -33,7 +35,6 @@ export function TacticalMap({
   const pawnsLayerRef = useRef<SVGGElement>(null)
   const sites = map.zones.filter((z) => z.site)
 
-  // Keep latest sim positions as lerp targets
   useEffect(() => {
     const next: PosMap = {}
     for (const p of players) {
@@ -43,13 +44,11 @@ export function TacticalMap({
       }
     }
     targetRef.current = next
-    // Drop stale ids
     for (const id of Object.keys(renderRef.current)) {
       if (!next[id]) delete renderRef.current[id]
     }
   }, [players])
 
-  // Smooth visual interpolation every frame
   useEffect(() => {
     let raf = 0
     let last = performance.now()
@@ -57,7 +56,6 @@ export function TacticalMap({
     const frame = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000)
       last = now
-      // Higher = snappier follow; ~12–16 feels smooth without lag
       const follow = 1 - Math.exp(-14 * dt)
 
       const targets = targetRef.current
@@ -160,6 +158,16 @@ export function TacticalMap({
             <stop offset="0%" stopColor="#243041" />
             <stop offset="100%" stopColor="#141a22" />
           </radialGradient>
+          <linearGradient id="tracer-ally" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="rgba(58,160,255,0)" />
+            <stop offset="40%" stopColor="rgba(150,210,255,0.95)" />
+            <stop offset="100%" stopColor="#fff" />
+          </linearGradient>
+          <linearGradient id="tracer-enemy" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="rgba(255,122,47,0)" />
+            <stop offset="40%" stopColor="rgba(255,180,100,0.95)" />
+            <stop offset="100%" stopColor="#fff" />
+          </linearGradient>
         </defs>
 
         <rect x="0" y="0" width="100" height="100" fill={`url(#floor-${map.id})`} />
@@ -204,6 +212,105 @@ export function TacticalMap({
           </g>
         )}
 
+        {/* Combat VFX layer */}
+        <g className="fx-layer">
+          {fx.map((f) => {
+            const t = f.life / f.maxLife
+            if (f.kind === 'shot') {
+              const dx = f.toX - f.fromX
+              const dy = f.toY - f.fromY
+              const len = Math.hypot(dx, dy) || 1
+              // Tracer travels along the shot line
+              const progress = 1 - t
+              const cx = f.fromX + dx * progress
+              const cy = f.fromY + dy * progress
+              const tx = f.fromX + dx * Math.max(0, progress - 0.22)
+              const ty = f.fromY + dy * Math.max(0, progress - 0.22)
+              const angle = (Math.atan2(dy, dx) * 180) / Math.PI
+              return (
+                <g key={f.id} className={`fx-shot ${f.team}`} opacity={0.4 + t * 0.6}>
+                  <line
+                    x1={f.fromX}
+                    y1={f.fromY}
+                    x2={f.toX}
+                    y2={f.toY}
+                    className="fx-beam"
+                  />
+                  <line
+                    x1={tx}
+                    y1={ty}
+                    x2={cx}
+                    y2={cy}
+                    className="fx-tracer"
+                    stroke={f.team === 'ally' ? 'url(#tracer-ally)' : 'url(#tracer-enemy)'}
+                  />
+                  <circle
+                    cx={f.fromX}
+                    cy={f.fromY}
+                    r={1.2 + (1 - t) * 1.4}
+                    className="fx-muzzle"
+                  />
+                  <g transform={`translate(${f.fromX} ${f.fromY}) rotate(${angle})`}>
+                    <polygon
+                      points="0,0 2.8,-1.1 2.8,1.1"
+                      className="fx-muzzle-flare"
+                      opacity={t}
+                    />
+                  </g>
+                  <title>{len.toFixed(0)}</title>
+                </g>
+              )
+            }
+
+            if (f.kind === 'hit') {
+              const scale = 0.6 + (1 - t) * 1.4
+              return (
+                <g
+                  key={f.id}
+                  className={`fx-hit ${f.team}`}
+                  transform={`translate(${f.toX} ${f.toY})`}
+                  opacity={t}
+                >
+                  <circle r={2.2 * scale} className="fx-hit-ring" />
+                  <circle r={0.9 * scale} className="fx-hit-core" />
+                  {[0, 60, 120, 180, 240, 300].map((deg) => {
+                    const rad = (deg * Math.PI) / 180
+                    const reach = 2.8 * scale
+                    return (
+                      <line
+                        key={deg}
+                        x1={Math.cos(rad) * 0.6}
+                        y1={Math.sin(rad) * 0.6}
+                        x2={Math.cos(rad) * reach}
+                        y2={Math.sin(rad) * reach}
+                        className="fx-spark"
+                      />
+                    )
+                  })}
+                </g>
+              )
+            }
+
+            // kill
+            const scale = 0.8 + (1 - t) * 2.2
+            return (
+              <g
+                key={f.id}
+                className={`fx-kill ${f.team}`}
+                transform={`translate(${f.toX} ${f.toY})`}
+                opacity={Math.min(1, t * 1.4)}
+              >
+                <circle r={3.5 * scale} className="fx-kill-blast" />
+                <circle r={1.6 * scale} className="fx-kill-core" />
+                <path
+                  d={`M0 ${-3.2 * scale} L${1.4 * scale} ${1.8 * scale} L${-1.4 * scale} ${1.8 * scale} Z`}
+                  className="fx-kill-flame"
+                />
+              </g>
+            )
+          })}
+        </g>
+
         <g ref={pawnsLayerRef}>
           {players.map((p) => {
             const pos = renderRef.current[p.id] ?? p
@@ -213,11 +320,14 @@ export function TacticalMap({
                 data-pid={p.id}
                 className={`pawn ${p.team} ${p.alive ? '' : 'down'} ${
                   p.id === selectedUnitId ? 'selected' : ''
-                } ${p.orderedTime > 0 ? 'ordered' : ''}`}
+                } ${p.orderedTime > 0 ? 'ordered' : ''} ${
+                  p.firingTime > 0 ? 'firing' : ''
+                }`}
                 transform={`translate(${pos.x} ${pos.y})`}
               >
                 <circle r="3.1" className="pawn-body" />
                 <circle r="3.8" className="pawn-ring" />
+                {p.firingTime > 0 && <circle r="5.2" className="pawn-fire-ring" />}
                 {p.alive && (
                   <rect
                     x="-4"

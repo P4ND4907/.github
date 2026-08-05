@@ -11,7 +11,7 @@ import {
   type GridPoint,
 } from '../data/map'
 import { playerPower } from './players'
-import type { MatchPlayer, MatchState, Player, Team, Upgrade } from '../types'
+import type { CombatFx, MatchPlayer, MatchState, Player, Team, Upgrade } from '../types'
 
 export interface MatchBuffs {
   power: number
@@ -64,7 +64,15 @@ function spawnPlayer(
   map: GameMap,
   base: Omit<
     MatchPlayer,
-    'x' | 'y' | 'targetX' | 'targetY' | 'waypoints' | 'alive' | 'orderedTime' | 'hp'
+    | 'x'
+    | 'y'
+    | 'targetX'
+    | 'targetY'
+    | 'waypoints'
+    | 'alive'
+    | 'orderedTime'
+    | 'hp'
+    | 'firingTime'
   >,
   zoneId: string,
 ): MatchPlayer {
@@ -81,6 +89,7 @@ function spawnPlayer(
     targetY: y,
     waypoints: [],
     orderedTime: 0,
+    firingTime: 0,
   }
 }
 
@@ -102,6 +111,7 @@ export function createIdleMatch(excludeMapId?: string | null): MatchState {
     result: null,
     selectedUnitId: null,
     orderMarker: null,
+    fx: [],
   }
 }
 
@@ -181,6 +191,7 @@ export function startMatch(
     result: null,
     selectedUnitId: allies[0]?.id ?? null,
     orderMarker: null,
+    fx: [],
   }
 }
 
@@ -382,11 +393,22 @@ export function tickMatch(
   let round = state.round
   let allyScore = state.allyScore
   let enemyScore = state.enemyScore
-  let players = state.players.map((p) =>
-    moveToward(retarget(map, p, state.winChance, buffs, dt), teamSpeed, dt),
-  )
+  let players = state.players.map((p) => {
+    const moved = moveToward(
+      retarget(map, p, state.winChance, buffs, dt),
+      teamSpeed,
+      dt,
+    )
+    return {
+      ...moved,
+      firingTime: Math.max(0, moved.firingTime - dt),
+    }
+  })
   const events = [...state.events]
   let orderMarker = state.orderMarker
+  let fx: CombatFx[] = state.fx
+    .map((f) => ({ ...f, life: f.life - dt }))
+    .filter((f) => f.life > 0)
 
   if (orderMarker && state.selectedUnitId) {
     const u = players.find((p) => p.id === state.selectedUnitId)
@@ -395,9 +417,9 @@ export function tickMatch(
     }
   }
 
-  // Scale fight attempts to real time (~0.35/sec base)
-  const fightChance = (0.32 + buffs.utility * 0.06) * dt
-  const fightRange = 16 + buffs.utility * 3.5
+  // More frequent skirmishes so shooting VFX show up often
+  const fightChance = (0.55 + buffs.utility * 0.08) * dt
+  const fightRange = 18 + buffs.utility * 3.5
 
   if (Math.random() < fightChance) {
     const aliveAllies = players.filter((p) => p.alive && p.team === 'ally')
@@ -430,36 +452,55 @@ export function tickMatch(
           ),
         )
         const dmg = 28 + buffs.power * 4 + Math.floor(Math.random() * 18)
-        if (Math.random() * 100 < chance) {
-          const newHp = e.hp - dmg
-          if (newHp <= 0) {
-            players = players.map((p) =>
-              p.id === e.id ? { ...p, alive: false, hp: 0 } : p,
-            )
-            events.push(`${a.name} fragged ${e.name}`)
-          } else {
-            players = players.map((p) =>
-              p.id === e.id ? { ...p, hp: newHp } : p,
-            )
-            events.push(`${a.name} hit ${e.name} (−${dmg})`)
-          }
+        const allyWins = Math.random() * 100 < chance
+        const shooter = allyWins ? a : e
+        const target = allyWins ? e : a
+
+        const shotId = `fx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+        fx.push({
+          id: `${shotId}_shot`,
+          kind: 'shot',
+          fromX: shooter.x,
+          fromY: shooter.y,
+          toX: target.x,
+          toY: target.y,
+          team: shooter.team,
+          life: 0.28,
+          maxLife: 0.28,
+        })
+        fx.push({
+          id: `${shotId}_hit`,
+          kind: allyWins && target.hp - dmg <= 0 ? 'kill' : 'hit',
+          fromX: shooter.x,
+          fromY: shooter.y,
+          toX: target.x,
+          toY: target.y,
+          team: shooter.team,
+          life: allyWins && target.hp - dmg <= 0 ? 0.55 : 0.35,
+          maxLife: allyWins && target.hp - dmg <= 0 ? 0.55 : 0.35,
+        })
+
+        players = players.map((p) =>
+          p.id === shooter.id ? { ...p, firingTime: 0.22 } : p,
+        )
+
+        const newHp = target.hp - dmg
+        if (newHp <= 0) {
+          players = players.map((p) =>
+            p.id === target.id ? { ...p, alive: false, hp: 0 } : p,
+          )
+          events.push(`${shooter.name} fragged ${target.name}`)
         } else {
-          const newHp = a.hp - dmg
-          if (newHp <= 0) {
-            players = players.map((p) =>
-              p.id === a.id ? { ...p, alive: false, hp: 0 } : p,
-            )
-            events.push(`${e.name} fragged ${a.name}`)
-          } else {
-            players = players.map((p) =>
-              p.id === a.id ? { ...p, hp: newHp } : p,
-            )
-            events.push(`${e.name} hit ${a.name} (−${dmg})`)
-          }
+          players = players.map((p) =>
+            p.id === target.id ? { ...p, hp: newHp } : p,
+          )
+          events.push(`${shooter.name} hit ${target.name} (−${dmg})`)
         }
       }
     }
   }
+
+  fx = fx.slice(-18)
 
   const alliesAlive = players.filter((p) => p.alive && p.team === 'ally').length
   const enemiesAlive = players.filter((p) => p.alive && p.team === 'enemy').length
@@ -500,11 +541,13 @@ export function tickMatch(
         events: events.slice(-8),
         result,
         orderMarker: null,
+        fx: [],
       }
     }
 
     timeLeft = 55
     orderMarker = null
+    fx = []
     players = players.map((p, _i, all) => {
       const spawns = p.team === 'ally' ? map.allySpawns : map.enemySpawns
       const idx = all.filter((x) => x.team === p.team).findIndex((x) => x.id === p.id)
@@ -541,6 +584,7 @@ export function tickMatch(
     players,
     events: events.slice(-8),
     orderMarker,
+    fx,
   }
 }
 
@@ -575,6 +619,7 @@ export function idlePreviewPlayers(map: GameMap): MatchPlayer[] {
       targetY: z.y,
       waypoints: [],
       orderedTime: 0,
+      firingTime: 0,
     }
   }
   return [

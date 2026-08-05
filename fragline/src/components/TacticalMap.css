@@ -42,9 +42,82 @@
   filter: brightness(1.25);
 }
 
-.pawn.ordered .pawn-ring {
-  stroke: var(--go);
+.pawn.firing .pawn-body {
+  filter: brightness(1.35);
+}
+
+.pawn-fire-ring {
+  fill: none;
+  stroke: #ffe6a0;
   stroke-width: 0.55;
+  opacity: 0.85;
+  animation: fireFlicker 0.12s ease-in-out infinite;
+}
+
+.fx-beam {
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 0.35;
+}
+
+.fx-tracer {
+  stroke-width: 1.15;
+  stroke-linecap: round;
+}
+
+.fx-muzzle {
+  fill: rgba(255, 230, 160, 0.55);
+}
+
+.fx-muzzle-flare {
+  fill: #ffe6a0;
+}
+
+.fx-shot.ally .fx-muzzle {
+  fill: rgba(150, 210, 255, 0.65);
+}
+
+.fx-shot.enemy .fx-muzzle {
+  fill: rgba(255, 180, 100, 0.7);
+}
+
+.fx-shot.enemy .fx-muzzle-flare {
+  fill: #ffb06a;
+}
+
+.fx-hit-ring {
+  fill: none;
+  stroke: #ffe6a0;
+  stroke-width: 0.45;
+}
+
+.fx-hit-core {
+  fill: #fff;
+}
+
+.fx-spark {
+  stroke: #ffc857;
+  stroke-width: 0.45;
+  stroke-linecap: round;
+}
+
+.fx-hit.ally .fx-hit-ring {
+  stroke: #9fd0ff;
+}
+
+.fx-hit.ally .fx-spark {
+  stroke: #9fd0ff;
+}
+
+.fx-kill-blast {
+  fill: rgba(255, 122, 47, 0.28);
+}
+
+.fx-kill-core {
+  fill: rgba(255, 230, 160, 0.85);
+}
+
+.fx-kill-flame {
+  fill: #ff8a3d;
 }
 
 .hp-bg {
