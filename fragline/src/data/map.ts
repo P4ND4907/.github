@@ -43,7 +43,7 @@ export const CELL = 10
 export const GRID = 16
 export const WORLD = GRID * CELL
 /** Soft radius — units can't occupy the same space */
-export const UNIT_SEP = 6.2
+export const UNIT_SEP = 5.0
 
 function cellCenter(col: number, row: number) {
   return { x: col * CELL + CELL / 2, y: row * CELL + CELL / 2 }
@@ -510,6 +510,10 @@ const DIRS: GridPoint[] = [
   { col: -1, row: 0 },
   { col: 0, row: 1 },
   { col: 0, row: -1 },
+  { col: 1, row: 1 },
+  { col: 1, row: -1 },
+  { col: -1, row: 1 },
+  { col: -1, row: -1 },
 ]
 
 export function findGridPath(
@@ -532,6 +536,11 @@ export function findGridPath(
       const nr = cur.row + d.row
       const k = key(nc, nr)
       if (prev.has(k) || !isOpenCell(map, nc, nr)) continue
+      // No cutting corners through walls on diagonals
+      if (d.col !== 0 && d.row !== 0) {
+        if (!isOpenCell(map, cur.col + d.col, cur.row)) continue
+        if (!isOpenCell(map, cur.col, cur.row + d.row)) continue
+      }
       prev.set(k, key(cur.col, cur.row))
       if (nc === to.col && nr === to.row) {
         const path: GridPoint[] = [{ col: nc, row: nr }]

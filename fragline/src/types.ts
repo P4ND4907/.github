@@ -122,6 +122,8 @@ export interface MatchPlayer {
   orderedTime: number
   /** Seconds of muzzle-flash / recoil pose */
   firingTime: number
+  /** Seconds with no progress toward target — triggers unstuck repath */
+  stuckTime: number
 }
 
 export interface MatchState {

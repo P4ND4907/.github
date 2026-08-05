@@ -81,6 +81,7 @@ function spawnPlayer(
     | 'orderedTime'
     | 'hp'
     | 'firingTime'
+    | 'stuckTime'
   >,
   zoneId: string,
 ): MatchPlayer {
@@ -98,6 +99,7 @@ function spawnPlayer(
     waypoints: [],
     orderedTime: 0,
     firingTime: 0,
+    stuckTime: 0,
   }
 }
 
@@ -318,7 +320,7 @@ function pickDestination(
       ? winChance < 48 + buffs.strategy
       : winChance > 52 - buffs.strategy
 
-  if (wantHold && Math.random() < 0.25 + buffs.strategy * 0.05) {
+  if (wantHold && Math.random() < 0.14 + buffs.strategy * 0.03) {
     const pool = p.team === 'ally' ? map.allyHold : map.enemyHold
     const candidates = pool
       .map((id) => zoneById(map, id))
@@ -330,9 +332,9 @@ function pickDestination(
   }
 
   // Flank instead of stacking the same lane as a teammate
-  if (allies?.length && Math.random() < 0.3 + buffs.intelligence * 0.04) {
+  if (allies?.length && Math.random() < 0.4 + buffs.intelligence * 0.05) {
     const crowded = allies.filter(
-      (a) => a.id !== p.id && a.alive && Math.hypot(a.x - p.x, a.y - p.y) < 14,
+      (a) => a.id !== p.id && a.alive && Math.hypot(a.x - p.x, a.y - p.y) < 16,
     )
     if (crowded.length && map.flankZones.length) {
       const z = zoneById(
@@ -342,6 +344,16 @@ function pickDestination(
       return { col: z.col, row: z.row }
     }
   }
+
+  // Avoid pathing onto a teammate's current target cell
+  const allyTargets = new Set(
+    (allies ?? [])
+      .filter((a) => a.alive)
+      .map((a) => {
+        const c = worldToCell(a.targetX, a.targetY)
+        return `${c.col},${c.row}`
+      }),
+  )
 
   // Hunt visible enemies — approach adjacent cell, don't stack on them
   if (foes?.length) {
@@ -374,12 +386,21 @@ function pickDestination(
         : aggressive
           ? map.enemyPush
           : map.enemyHold
+    const shuffled = [...pool].sort(() => Math.random() - 0.5)
+    for (const id of shuffled) {
+      const z = zoneById(map, id)
+      if (!allyTargets.has(`${z.col},${z.row}`)) return { col: z.col, row: z.row }
+    }
     const z = zoneById(map, pool[Math.floor(Math.random() * pool.length)])
     return { col: z.col, row: z.row }
   }
 
   const here = worldToCell(p.x, p.y)
   const roamRadius = 3 + Math.min(6, Math.floor(buffs.intelligence / 2))
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const cell = randomOpenCell(map, here, roamRadius)
+    if (!allyTargets.has(`${cell.col},${cell.row}`)) return cell
+  }
   return randomOpenCell(map, here, roamRadius)
 }
 
@@ -394,16 +415,23 @@ function retarget(
 ): MatchPlayer {
   if (!p.alive) return p
 
+  // Force repath when jammed — don't sit on a dead waypoint list
+  if (p.stuckTime > 0.45 && p.orderedTime <= 0) {
+    const from = worldToCell(p.x, p.y)
+    const escape = randomOpenCell(map, from, 5)
+    return { ...assignRoamPath(map, p, escape), stuckTime: 0 }
+  }
+
   if (p.orderedTime > 0) {
     return { ...p, orderedTime: Math.max(0, p.orderedTime - dt) }
   }
 
-  if (p.waypoints.length > 0) return p
+  if (p.waypoints.length > 0 && p.stuckTime < 0.35) return p
 
   const dist = Math.hypot(p.targetX - p.x, p.targetY - p.y)
-  if (dist > 1.2) return p
+  if (dist > 1.2 && p.stuckTime < 0.35) return p
 
-  const repathRate = (0.5 - buffs.intelligence * 0.035) * dt
+  const repathRate = (0.65 - buffs.intelligence * 0.03) * dt
   const huntBoost =
     foes?.some(
       (f) =>
@@ -411,9 +439,9 @@ function retarget(
         Math.hypot(f.x - p.x, f.y - p.y) < 28 &&
         hasLineOfSight(map, p.x, p.y, f.x, f.y),
     )
-      ? 0.3
+      ? 0.45
       : 0
-  if (Math.random() > Math.max(0.08, repathRate + huntBoost * dt)) return p
+  if (Math.random() > Math.max(0.12, repathRate + huntBoost * dt)) return p
 
   return assignRoamPath(
     map,
@@ -451,7 +479,7 @@ function moveToward(p: MatchPlayer, teamSpeed: number, dt: number): MatchPlayer 
   }
 }
 
-/** Soft body collision — no rushing through teammates or enemies */
+/** Soft body collision — slide past, don't lock into corridor deadlocks */
 function separatePlayers(map: GameMap, players: MatchPlayer[]): MatchPlayer[] {
   const next = players.map((p) => ({ ...p }))
   for (let i = 0; i < next.length; i++) {
@@ -462,26 +490,72 @@ function separatePlayers(map: GameMap, players: MatchPlayer[]): MatchPlayer[] {
       const dy = next[j].y - next[i].y
       const d = Math.hypot(dx, dy)
       if (d >= UNIT_SEP || d < 0.01) continue
-      const push = ((UNIT_SEP - d) / 2) * 0.85
+
       const nx = dx / d
       const ny = dy / d
-      const ax = next[i].x - nx * push
-      const ay = next[i].y - ny * push
-      const bx = next[j].x + nx * push
-      const by = next[j].y + ny * push
-      const ac = worldToCell(ax, ay)
-      const bc = worldToCell(bx, by)
-      if (isOpenCell(map, ac.col, ac.row)) {
-        next[i].x = ax
-        next[i].y = ay
+      // Weaker push + lateral slide so units slip past each other
+      const push = ((UNIT_SEP - d) / 2) * 0.55
+      const side = 0.35
+      const sx = -ny * side
+      const sy = nx * side
+
+      const tryMove = (idx: number, ox: number, oy: number) => {
+        const nx2 = next[idx].x + ox
+        const ny2 = next[idx].y + oy
+        const cell = worldToCell(nx2, ny2)
+        if (isOpenCell(map, cell.col, cell.row)) {
+          next[idx].x = nx2
+          next[idx].y = ny2
+          return true
+        }
+        // Try pure lateral if forward push hits wall
+        const lx = next[idx].x + (ox === 0 ? 0 : Math.sign(ox) === Math.sign(sx) ? sx : -sx)
+        const ly = next[idx].y + (oy === 0 ? 0 : Math.sign(oy) === Math.sign(sy) ? sy : -sy)
+        const lc = worldToCell(lx, ly)
+        if (isOpenCell(map, lc.col, lc.row)) {
+          next[idx].x = lx
+          next[idx].y = ly
+          return true
+        }
+        return false
       }
-      if (isOpenCell(map, bc.col, bc.row)) {
-        next[j].x = bx
-        next[j].y = by
-      }
+
+      // Unit closer to its goal yields less (keeps priority)
+      const di = Math.hypot(next[i].targetX - next[i].x, next[i].targetY - next[i].y)
+      const dj = Math.hypot(next[j].targetX - next[j].x, next[j].targetY - next[j].y)
+      const iYield = di < dj ? 0.35 : 0.65
+      const jYield = 1 - iYield
+
+      tryMove(i, -nx * push * iYield + sx * (i % 2 === 0 ? 1 : -1), -ny * push * iYield + sy * (i % 2 === 0 ? 1 : -1))
+      tryMove(j, nx * push * jYield + sx * (j % 2 === 0 ? 1 : -1), ny * push * jYield + sy * (j % 2 === 0 ? 1 : -1))
     }
   }
   return next
+}
+
+function markStuckProgress(
+  before: MatchPlayer[],
+  after: MatchPlayer[],
+  dt: number,
+): MatchPlayer[] {
+  return after.map((p) => {
+    if (!p.alive) return { ...p, stuckTime: 0 }
+    const prev = before.find((b) => b.id === p.id)
+    if (!prev) return p
+    const moved = Math.hypot(p.x - prev.x, p.y - prev.y)
+    const needMove =
+      Math.hypot(p.targetX - p.x, p.targetY - p.y) > 1.4 || p.waypoints.length > 0
+    if (needMove && moved < 0.12) {
+      // Honor mid-tick repath resets (don't re-accumulate old stuckTime)
+      const wasReset =
+        (p.stuckTime ?? 0) === 0 && (prev.stuckTime ?? 0) > 0.3
+      return {
+        ...p,
+        stuckTime: wasReset ? dt * 0.2 : (prev.stuckTime ?? 0) + dt,
+      }
+    }
+    return { ...p, stuckTime: 0 }
+  })
 }
 
 export function tickMatch(
@@ -517,9 +591,26 @@ export function tickMatch(
     }
   })
   players = separatePlayers(map, players)
+  players = markStuckProgress(state.players, players, dt)
+
+  // Unstuck pass — clear deadlocks and peel to open ground
+  const unstuckNames: string[] = []
+  players = players.map((p) => {
+    if (!p.alive || (p.stuckTime ?? 0) < 0.55) return p
+    const from = worldToCell(p.x, p.y)
+    const escape = randomOpenCell(map, from, 6)
+    const ordered =
+      p.orderedTime > 0.4 ? Math.max(2, p.orderedTime) : 0
+    const next = assignRoamPath(map, p, escape, ordered)
+    unstuckNames.push(p.name)
+    return { ...next, stuckTime: 0 }
+  })
 
   let gadgets = [...(state.gadgets ?? [])]
   const events = [...state.events]
+  if (unstuckNames.length) {
+    events.push(`Unstuck ${unstuckNames.slice(0, 3).join(', ')}`)
+  }
   let orderMarker = state.orderMarker
   let fx: CombatFx[] = state.fx
     .map((f) => ({ ...f, life: f.life - dt }))
@@ -802,6 +893,25 @@ export function tickMatch(
     Math.min(92, state.winChance + aliveFactor * 0.05 * dt),
   )
 
+  // Live data pulse for the match feed (~every 2s)
+  const pulse = Math.floor(timeLeft / 2)
+  const prevPulse = Math.floor(state.timeLeft / 2)
+  if (pulse !== prevPulse) {
+    const jammed = players.filter((p) => p.alive && (p.stuckTime ?? 0) > 0.25).length
+    const moving = players.filter((p) => {
+      if (!p.alive) return false
+      return (
+        p.waypoints.length > 0 ||
+        Math.hypot(p.targetX - p.x, p.targetY - p.y) > 1.5
+      )
+    }).length
+    const clays = gadgets.filter((g) => g.kind === 'claymore').length
+    const nades = gadgets.filter((g) => g.kind === 'frag').length
+    events.push(
+      `LIVE · ${moving} moving · ${jammed} jammed · ${clays} clay · ${nades} nade`,
+    )
+  }
+
   return {
     ...state,
     round,
@@ -810,7 +920,7 @@ export function tickMatch(
     timeLeft,
     winChance: Math.round(winChance),
     players,
-    events: events.slice(-8),
+    events: events.slice(-10),
     orderMarker,
     fx,
     gadgets,
@@ -851,6 +961,7 @@ export function idlePreviewPlayers(map: GameMap): MatchPlayer[] {
       waypoints: [],
       orderedTime: 0,
       firingTime: 0,
+      stuckTime: 0,
     }
   }
   return [

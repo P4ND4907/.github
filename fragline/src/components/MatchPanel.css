@@ -264,6 +264,30 @@
   background: rgba(255, 255, 255, 0.03);
 }
 
+.match-feed li.telemetry {
+  color: #9eb6d4;
+  font-family: 'IBM Plex Mono', 'IBM Plex Sans', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+}
+
+.live-data {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(58, 160, 255, 0.08);
+  border: 1px solid rgba(58, 160, 255, 0.18);
+  font-family: 'IBM Plex Mono', 'IBM Plex Sans', monospace;
+  font-size: 0.68rem;
+  color: #b7c8de;
+}
+
+.live-data .warn {
+  color: #ffb060;
+}
+
 .result-banner {
   display: grid;
   grid-template-columns: 1fr auto;

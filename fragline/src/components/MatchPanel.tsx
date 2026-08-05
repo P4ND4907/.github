@@ -184,10 +184,48 @@ export function MatchPanel() {
         </div>
       )}
 
+      {live && (
+        <div className="live-data" aria-live="polite">
+          {(() => {
+            const jammed = match.players.filter(
+              (p) => p.alive && (p.stuckTime ?? 0) > 0.25,
+            ).length
+            const moving = match.players.filter(
+              (p) =>
+                p.alive &&
+                (p.waypoints.length > 0 ||
+                  Math.hypot(p.targetX - p.x, p.targetY - p.y) > 1.5),
+            ).length
+            const clays = (match.gadgets ?? []).filter((g) => g.kind === 'claymore')
+              .length
+            return (
+              <>
+                <span>{moving} moving</span>
+                <span className={jammed > 0 ? 'warn' : ''}>{jammed} jammed</span>
+                <span>{clays} clay</span>
+                <span>
+                  {
+                    match.players.filter((p) => p.alive && p.team === 'ally').length
+                  }
+                  /
+                  {
+                    match.players.filter((p) => p.alive && p.team === 'enemy')
+                      .length
+                  }{' '}
+                  alive
+                </span>
+              </>
+            )
+          })()}
+        </div>
+      )}
+
       {match.events.length > 0 && (
         <ul className="match-feed">
-          {match.events.slice(-3).map((e, i) => (
-            <li key={`${e}-${i}`}>{e}</li>
+          {match.events.slice(-5).map((e, i) => (
+            <li key={`${e}-${i}`} className={e.startsWith('LIVE') ? 'telemetry' : ''}>
+              {e}
+            </li>
           ))}
         </ul>
       )}
