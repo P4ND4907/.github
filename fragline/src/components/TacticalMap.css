@@ -22,6 +22,53 @@
   padding: 2px 7px;
   border-radius: 4px;
   animation: fireFlicker 1.2s ease-in-out infinite;
+  z-index: 2;
+}
+
+.tactical-map.is-interactive {
+  cursor: crosshair;
+}
+
+.tactical-map.is-interactive .pawn.ally {
+  cursor: pointer;
+}
+
+.pawn.selected .pawn-ring {
+  stroke: #fff;
+  stroke-width: 0.7;
+}
+
+.pawn.selected .pawn-body {
+  filter: brightness(1.25);
+}
+
+.pawn.ordered .pawn-ring {
+  stroke: var(--go);
+  stroke-width: 0.55;
+}
+
+.hp-bg {
+  fill: rgba(0, 0, 0, 0.55);
+}
+
+.hp-fill {
+  fill: var(--go);
+}
+
+.hp-fill.enemy {
+  fill: var(--enemy);
+}
+
+.order-marker circle {
+  fill: none;
+  stroke: var(--go);
+  stroke-width: 0.55;
+  animation: fireFlicker 1s ease-in-out infinite;
+}
+
+.order-marker .order-core {
+  fill: var(--go);
+  stroke: none;
 }
 
 .map-svg {

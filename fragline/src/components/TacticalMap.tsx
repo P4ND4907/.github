@@ -1,3 +1,4 @@
+import { useRef, type MouseEvent } from 'react'
 import { getMap } from '../data/map'
 import type { MatchPlayer } from '../types'
 import './TacticalMap.css'
@@ -6,14 +7,28 @@ interface Props {
   players: MatchPlayer[]
   mapId?: string | null
   live?: boolean
+  selectedUnitId?: string | null
+  orderMarker?: { x: number; y: number } | null
+  interactive?: boolean
+  onSelectUnit?: (id: string) => void
+  onCommandMove?: (x: number, y: number) => void
 }
 
-export function TacticalMap({ players, mapId, live }: Props) {
+export function TacticalMap({
+  players,
+  mapId,
+  live,
+  selectedUnitId,
+  orderMarker,
+  interactive,
+  onSelectUnit,
+  onCommandMove,
+}: Props) {
   const map = getMap(mapId)
+  const svgRef = useRef<SVGSVGElement>(null)
   const sites = map.zones.filter((z) => z.site)
   const combatHotspots = players.filter((p) => !p.alive).slice(0, 3)
 
-  // Draw corridor hints from graph edges
   const corridors = map.edges
     .map(([a, b]) => {
       const za = map.zones.find((z) => z.id === a)
@@ -23,16 +38,53 @@ export function TacticalMap({ players, mapId, live }: Props) {
     })
     .filter(Boolean) as { x1: number; y1: number; x2: number; y2: number; key: string }[]
 
+  function toWorld(e: MouseEvent<SVGSVGElement>) {
+    const svg = svgRef.current
+    if (!svg) return null
+    const pt = svg.createSVGPoint()
+    pt.x = e.clientX
+    pt.y = e.clientY
+    const ctm = svg.getScreenCTM()
+    if (!ctm) return null
+    const local = pt.matrixTransform(ctm.inverse())
+    return { x: local.x, y: local.y }
+  }
+
+  function handleClick(e: MouseEvent<SVGSVGElement>) {
+    if (!interactive || !live) return
+    const world = toWorld(e)
+    if (!world) return
+
+    // Prefer selecting a nearby ally pawn
+    let nearest: MatchPlayer | null = null
+    let best = 5.5
+    for (const p of players) {
+      if (p.team !== 'ally' || !p.alive) continue
+      const d = Math.hypot(p.x - world.x, p.y - world.y)
+      if (d < best) {
+        best = d
+        nearest = p
+      }
+    }
+    if (nearest) {
+      onSelectUnit?.(nearest.id)
+      return
+    }
+    onCommandMove?.(world.x, world.y)
+  }
+
   return (
     <div
-      className={`tactical-map ${live ? 'is-live' : ''}`}
+      className={`tactical-map ${live ? 'is-live' : ''} ${interactive ? 'is-interactive' : ''}`}
       style={{ ['--map-accent' as string]: map.accent }}
     >
       <svg
+        ref={svgRef}
         viewBox="0 0 100 100"
         className="map-svg"
         role="img"
         aria-label={`${map.name} tactical map`}
+        onClick={handleClick}
       >
         <defs>
           <pattern id={`grid-${map.id}`} width="6" height="6" patternUnits="userSpaceOnUse">
@@ -84,6 +136,13 @@ export function TacticalMap({ players, mapId, live }: Props) {
           </g>
         ))}
 
+        {orderMarker && (
+          <g className="order-marker">
+            <circle cx={orderMarker.x} cy={orderMarker.y} r="3.5" />
+            <circle cx={orderMarker.x} cy={orderMarker.y} r="1.2" className="order-core" />
+          </g>
+        )}
+
         {combatHotspots.map((p) => (
           <g key={`fx-${p.id}`} className="combat-fx">
             <circle cx={p.x} cy={p.y} r="3.2" className="fx-glow" />
@@ -97,11 +156,33 @@ export function TacticalMap({ players, mapId, live }: Props) {
         {players.map((p) => (
           <g
             key={p.id}
-            className={`pawn ${p.team} ${p.alive ? '' : 'down'}`}
+            className={`pawn ${p.team} ${p.alive ? '' : 'down'} ${
+              p.id === selectedUnitId ? 'selected' : ''
+            } ${p.orderedTicks > 0 ? 'ordered' : ''}`}
             transform={`translate(${p.x} ${p.y})`}
           >
             <circle r="3.1" className="pawn-body" />
             <circle r="3.8" className="pawn-ring" />
+            {p.alive && (
+              <rect
+                x="-4"
+                y="4.2"
+                width="8"
+                height="1.6"
+                rx="0.5"
+                className="hp-bg"
+              />
+            )}
+            {p.alive && (
+              <rect
+                x="-4"
+                y="4.2"
+                width={8 * Math.max(0, p.hp / p.maxHp)}
+                height="1.6"
+                rx="0.5"
+                className={`hp-fill ${p.team}`}
+              />
+            )}
             <text y="-4.8" textAnchor="middle" className="pawn-name">
               {p.name}
             </text>

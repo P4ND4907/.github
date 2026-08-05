@@ -11,7 +11,7 @@ import {
   skillUpgradeCost,
   squadPower,
 } from '../lib/players'
-import { createIdleMatch, startMatch, tickMatch } from '../lib/matchSim'
+import { createIdleMatch, startMatch, tickMatch, commandUnitTo, selectMatchUnit as selectUnitInMatch, syncAllyStats } from '../lib/matchSim'
 import type { GameState, Player, Screen, SkillKey, Upgrade } from '../types'
 
 export { formatCash, playerPower, marketPrice, skillUpgradeCost }
@@ -84,7 +84,10 @@ function calcIncome(power: number, leagueIndex: number) {
 }
 
 function syncPower(squad: Player[], upgrades: Upgrade[]) {
-  const upgradePower = upgrades.reduce((s, u) => s + u.level * u.powerPerLevel * 12, 0)
+  const upgradePower = upgrades.reduce(
+    (s, u) => s + u.level * u.powerPerLevel * 18,
+    0,
+  )
   return squadPower(squad) + upgradePower
 }
 
@@ -95,6 +98,9 @@ interface GameStore extends GameState {
   tickLiveMatch: () => void
   playMatch: () => void
   dismissResult: () => void
+  cycleMap: () => void
+  selectMatchUnit: (id: string) => void
+  commandSelectedUnit: (x: number, y: number) => void
   buyUpgrade: (id: string) => void
   upgradeSkill: (playerId: string, skill: SkillKey) => void
   selectPlayer: (id: string | null) => void
@@ -222,6 +228,26 @@ export const useGameStore = create<GameStore>()(
         get().promoteIfReady()
       },
 
+      cycleMap: () => {
+        const s = get()
+        if (s.match.phase !== 'idle') return
+        set({ match: createIdleMatch(s.match.mapId) })
+      },
+
+      selectMatchUnit: (id) => {
+        const s = get()
+        if (s.match.phase !== 'live') return
+        set({ match: selectUnitInMatch(s.match, id) })
+      },
+
+      commandSelectedUnit: (x, y) => {
+        const s = get()
+        if (s.match.phase !== 'live') return
+        const id = s.match.selectedUnitId
+        if (!id) return
+        set({ match: commandUnitTo(s.match, id, x, y) })
+      },
+
       promoteIfReady: () => {
         const s = get()
         const league = LEAGUES[s.leagueIndex]
@@ -285,10 +311,13 @@ export const useGameStore = create<GameStore>()(
           return { ...p, skills, level: Math.min(99, leveled) }
         })
         const teamPower = syncPower(squad, s.upgrades)
+        const match =
+          s.match.phase === 'live' ? syncAllyStats(s.match, squad) : s.match
         set({
           cash: s.cash - cost,
           squad,
           teamPower,
+          match,
           incomePerSec: calcIncome(teamPower, s.leagueIndex),
           standings: s.standings.map((t) =>
             t.isPlayer ? { ...t, power: teamPower } : t,

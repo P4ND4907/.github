@@ -1,6 +1,7 @@
 import {
   findGridPath,
   getMap,
+  isOpenCell,
   pathToWorld,
   pickRandomMap,
   randomOpenCell,
@@ -9,23 +10,19 @@ import {
   type GameMap,
   type GridPoint,
 } from '../data/map'
+import { playerPower } from './players'
 import type { MatchPlayer, MatchState, Player, Team, Upgrade } from '../types'
 
 export interface MatchBuffs {
-  /** Combat / win chance */
   power: number
-  /** Smarter paths, less idle dithering, better dest choice */
   intelligence: number
-  /** Push vs hold timing, site focus */
   strategy: number
-  /** Movement speed */
   reflex: number
-  /** Fight range / skirmish chance */
   utility: number
-  /** Late-round clutch bias */
   clutch: number
 }
 
+/** Stronger curves so upgrades are clearly felt in-match */
 export function buffsFromUpgrades(upgrades: Upgrade[]): MatchBuffs {
   const levels = (id: string) => upgrades.find((u) => u.id === id)?.level ?? 1
   return {
@@ -38,9 +35,37 @@ export function buffsFromUpgrades(upgrades: Upgrade[]): MatchBuffs {
   }
 }
 
+export function describeBuffs(buffs: MatchBuffs): string {
+  return `PWR${buffs.power} INT${buffs.intelligence} STR${buffs.strategy} RFX${buffs.reflex} UTL${buffs.utility} CLU${buffs.clutch}`
+}
+
+function unitCombat(p: Player): number {
+  const s = p.skills
+  return Math.round(
+    s.aim * 0.35 +
+      s.reflex * 0.15 +
+      s.recoil * 0.1 +
+      s.positioning * 0.15 +
+      s.utility * 0.1 +
+      s.clutch * 0.15 +
+      p.level * 2,
+  )
+}
+
+function unitSpeed(p: Player): number {
+  return 1 + p.skills.reflex / 120 + p.skills.positioning / 200
+}
+
+function enemyCombat(seed: number): number {
+  return 38 + seed * 7 + Math.floor(Math.random() * 18)
+}
+
 function spawnPlayer(
   map: GameMap,
-  base: Omit<MatchPlayer, 'x' | 'y' | 'targetX' | 'targetY' | 'waypoints' | 'alive'>,
+  base: Omit<
+    MatchPlayer,
+    'x' | 'y' | 'targetX' | 'targetY' | 'waypoints' | 'alive' | 'orderedTicks' | 'hp'
+  >,
   zoneId: string,
 ): MatchPlayer {
   const z = zoneById(map, zoneId)
@@ -49,11 +74,13 @@ function spawnPlayer(
   return {
     ...base,
     alive: true,
+    hp: base.maxHp,
     x,
     y,
     targetX: x,
     targetY: y,
     waypoints: [],
+    orderedTicks: 0,
   }
 }
 
@@ -73,6 +100,8 @@ export function createIdleMatch(excludeMapId?: string | null): MatchState {
     events: [],
     opponentId: null,
     result: null,
+    selectedUnitId: null,
+    orderMarker: null,
   }
 }
 
@@ -85,11 +114,15 @@ export function startMatch(
 ): MatchState {
   const map = pickRandomMap(previousMapId)
   const buffs = buffsFromUpgrades(upgrades)
-  const powerBias = (buffs.power - 1) * 2.2 + (buffs.strategy - 1) * 1.4
+  // Clear, strong upgrade impact on opening win%
+  const powerBias =
+    (buffs.power - 1) * 4.5 +
+    (buffs.strategy - 1) * 3 +
+    (buffs.intelligence - 1) * 1.5
   const winChance = Math.max(
-    8,
+    10,
     Math.min(
-      92,
+      90,
       Math.round((teamPower / (teamPower + opponent.power)) * 100 + powerBias),
     ),
   )
@@ -97,7 +130,15 @@ export function startMatch(
   const allies: MatchPlayer[] = squad.slice(0, 5).map((p, i) =>
     spawnPlayer(
       map,
-      { id: p.id, name: p.name, team: 'ally' },
+      {
+        id: p.id,
+        squadId: p.id,
+        name: p.name,
+        team: 'ally',
+        maxHp: 100 + Math.floor(p.skills.clutch / 2),
+        combat: unitCombat(p),
+        speed: unitSpeed(p),
+      },
       map.allySpawns[i] ?? map.allySpawns[0],
     ),
   )
@@ -106,7 +147,15 @@ export function startMatch(
   const enemies: MatchPlayer[] = enemyNames.map((name, i) =>
     spawnPlayer(
       map,
-      { id: `e_${i}`, name, team: 'enemy' },
+      {
+        id: `e_${i}`,
+        squadId: null,
+        name,
+        team: 'enemy',
+        maxHp: 100,
+        combat: enemyCombat(i) + Math.floor(opponent.power / 80),
+        speed: 1 + Math.random() * 0.25,
+      },
       map.enemySpawns[i] ?? map.enemySpawns[0],
     ),
   )
@@ -123,12 +172,15 @@ export function startMatch(
     mapName: map.name,
     players: [...allies, ...enemies],
     events: [
-      `Map: ${map.name}`,
-      `Match vs ${opponent.name}`,
-      `INT ${buffs.intelligence} · STRAT ${buffs.strategy} · PWR ${buffs.power}`,
+      `MAP → ${map.name}`,
+      `vs ${opponent.name}`,
+      describeBuffs(buffs),
+      'Tap a blue unit, then tap the map to move',
     ],
     opponentId: opponent.id,
     result: null,
+    selectedUnitId: allies[0]?.id ?? null,
+    orderMarker: null,
   }
 }
 
@@ -136,11 +188,11 @@ function assignRoamPath(
   map: GameMap,
   p: MatchPlayer,
   dest: GridPoint,
+  orderedTicks = 0,
 ): MatchPlayer {
   const from = worldToCell(p.x, p.y)
   let cells = findGridPath(map, from, dest)
 
-  // Never beam across the map — if BFS failed, step to a neighbor instead
   if (cells.length <= 1) {
     const near = randomOpenCell(map, from, 2)
     cells = findGridPath(map, from, near)
@@ -148,8 +200,7 @@ function assignRoamPath(
 
   const world = pathToWorld(cells.slice(1))
   if (!world.length) {
-    // Stay put rather than clipping through walls
-    return { ...p, waypoints: [], targetX: p.x, targetY: p.y }
+    return { ...p, waypoints: [], targetX: p.x, targetY: p.y, orderedTicks }
   }
 
   const [first, ...rest] = world
@@ -158,6 +209,73 @@ function assignRoamPath(
     waypoints: rest,
     targetX: first.x,
     targetY: first.y,
+    orderedTicks,
+  }
+}
+
+/** Player-issued move order — pathfinds around walls */
+export function commandUnitTo(
+  state: MatchState,
+  unitId: string,
+  worldX: number,
+  worldY: number,
+): MatchState {
+  if (state.phase !== 'live') return state
+  const map = getMap(state.mapId)
+  const cell = worldToCell(worldX, worldY)
+  if (!isOpenCell(map, cell.col, cell.row)) {
+    const near = randomOpenCell(map, cell, 2)
+    return commandUnitTo(
+      state,
+      unitId,
+      near.col * 10 + 5,
+      near.row * 10 + 5,
+    )
+  }
+
+  const players = state.players.map((p) => {
+    if (p.id !== unitId || p.team !== 'ally' || !p.alive) return p
+    return assignRoamPath(map, p, cell, 28)
+  })
+
+  const unit = players.find((p) => p.id === unitId)
+  const events = unit
+    ? [...state.events, `${unit.name} ordered → ${cell.col},${cell.row}`]
+    : state.events
+
+  return {
+    ...state,
+    players,
+    selectedUnitId: unitId,
+    orderMarker: { x: cell.col * 10 + 5, y: cell.row * 10 + 5 },
+    events: events.slice(-8),
+  }
+}
+
+export function selectMatchUnit(state: MatchState, unitId: string | null): MatchState {
+  return { ...state, selectedUnitId: unitId }
+}
+
+/** Refresh ally combat stats from squad mid-match after unit upgrade */
+export function syncAllyStats(state: MatchState, squad: Player[]): MatchState {
+  return {
+    ...state,
+    players: state.players.map((mp) => {
+      if (mp.team !== 'ally' || !mp.squadId) return mp
+      const p = squad.find((s) => s.id === mp.squadId)
+      if (!p) return mp
+      const combat = unitCombat(p)
+      const speed = unitSpeed(p)
+      const maxHp = 100 + Math.floor(p.skills.clutch / 2)
+      return {
+        ...mp,
+        combat,
+        speed,
+        maxHp,
+        hp: mp.alive ? Math.min(mp.hp + 8, maxHp) : mp.hp,
+        name: p.name,
+      }
+    }),
   }
 }
 
@@ -169,12 +287,11 @@ function pickDestination(
 ): GridPoint {
   const aggressive =
     p.team === 'ally'
-      ? winChance > 42 + buffs.strategy
-      : winChance < 58 - buffs.strategy
+      ? winChance > 40 + buffs.strategy * 2
+      : winChance < 60 - buffs.strategy * 2
 
-  // Strategy: prefer named tactical zones
-  // Intelligence: more often pick meaningful objectives vs random roam
-  const useObjective = Math.random() < 0.35 + buffs.intelligence * 0.06 + buffs.strategy * 0.04
+  const useObjective =
+    Math.random() < 0.3 + buffs.intelligence * 0.08 + buffs.strategy * 0.05
 
   if (useObjective) {
     const pool =
@@ -189,9 +306,8 @@ function pickDestination(
     return { col: z.col, row: z.row }
   }
 
-  // Free roam to a nearby open cell — explores the maze without slamming walls
   const here = worldToCell(p.x, p.y)
-  const roamRadius = 2 + Math.min(4, Math.floor(buffs.intelligence / 2))
+  const roamRadius = 2 + Math.min(5, Math.floor(buffs.intelligence / 2))
   return randomOpenCell(map, here, roamRadius)
 }
 
@@ -202,16 +318,20 @@ function retarget(
   buffs: MatchBuffs,
 ): MatchPlayer {
   if (!p.alive) return p
-  // Still following a path — keep going (intelligence = stick to plan)
-  const stickChance = 0.88 + buffs.intelligence * 0.015
+
+  // Honor manual orders
+  if (p.orderedTicks > 0) {
+    return { ...p, orderedTicks: p.orderedTicks - 1 }
+  }
+
+  const stickChance = 0.86 + buffs.intelligence * 0.02
   if (p.waypoints.length > 0 && Math.random() < stickChance) return p
 
   const dist = Math.hypot(p.targetX - p.x, p.targetY - p.y)
   if (dist > 2.5 && Math.random() < stickChance) return p
 
-  // Retarget cadence: smarter teams repath less randomly
-  const repathChance = 0.55 - buffs.intelligence * 0.03
-  if (Math.random() > Math.max(0.2, repathChance)) return p
+  const repathChance = 0.58 - buffs.intelligence * 0.04
+  if (Math.random() > Math.max(0.18, repathChance)) return p
 
   return assignRoamPath(map, p, pickDestination(map, p, winChance, buffs))
 }
@@ -225,13 +345,14 @@ function advanceWaypoints(p: MatchPlayer): MatchPlayer {
   return { ...p, waypoints: rest, targetX: next.x, targetY: next.y }
 }
 
-function moveToward(p: MatchPlayer, speed: number): MatchPlayer {
+function moveToward(p: MatchPlayer, teamSpeed: number): MatchPlayer {
   if (!p.alive) return p
   const stepped = advanceWaypoints(p)
   const dx = stepped.targetX - stepped.x
   const dy = stepped.targetY - stepped.y
   const dist = Math.hypot(dx, dy)
   if (dist < 0.35) return stepped
+  const speed = teamSpeed * p.speed
   const step = Math.min(speed, dist)
   return {
     ...stepped,
@@ -244,19 +365,28 @@ export function tickMatch(state: MatchState, upgrades: Upgrade[] = []): MatchSta
   if (state.phase !== 'live') return state
   const map = getMap(state.mapId)
   const buffs = buffsFromUpgrades(upgrades)
-  const speed = 1.7 + buffs.reflex * 0.22
+  const teamSpeed = 1.55 + buffs.reflex * 0.35
 
   let timeLeft = state.timeLeft - 1
   let round = state.round
   let allyScore = state.allyScore
   let enemyScore = state.enemyScore
   let players = state.players.map((p) =>
-    moveToward(retarget(map, p, state.winChance, buffs), speed),
+    moveToward(retarget(map, p, state.winChance, buffs), teamSpeed),
   )
   const events = [...state.events]
+  let orderMarker = state.orderMarker
 
-  const fightChance = 0.22 + buffs.utility * 0.035
-  const fightRange = 18 + buffs.utility * 2.5
+  // Clear marker when selected unit arrives
+  if (orderMarker && state.selectedUnitId) {
+    const u = players.find((p) => p.id === state.selectedUnitId)
+    if (u && Math.hypot(u.x - orderMarker.x, u.y - orderMarker.y) < 4) {
+      orderMarker = null
+    }
+  }
+
+  const fightChance = 0.2 + buffs.utility * 0.05
+  const fightRange = 16 + buffs.utility * 3.5
 
   if (Math.random() < fightChance) {
     const aliveAllies = players.filter((p) => p.alive && p.team === 'ally')
@@ -276,20 +406,46 @@ export function tickMatch(state: MatchState, upgrades: Upgrade[] = []): MatchSta
         }
       }
       if (best < fightRange) {
-        const late = timeLeft < 18 || aliveAllies.length + aliveEnemies.length <= 3
-        const clutchBias = late ? buffs.clutch * 1.8 : 0
-        const allyFavored =
-          Math.random() * 100 < state.winChance + clutchBias + (buffs.power - 1) * 1.5
-        if (allyFavored) {
-          players = players.map((p) =>
-            p.id === e.id ? { ...p, alive: false } : p,
-          )
-          events.push(`${a.name} fragged ${e.name}`)
+        const late =
+          timeLeft < 18 || aliveAllies.length + aliveEnemies.length <= 3
+        const clutchBias = late ? buffs.clutch * 3.5 : buffs.clutch * 0.5
+        // Unit combat stats matter — upgraded units win more fights
+        const combatDelta = (a.combat - e.combat) * 0.45
+        const teamBias = (buffs.power - 1) * 3.5
+        const chance = Math.max(
+          8,
+          Math.min(
+            92,
+            state.winChance * 0.55 + 25 + combatDelta + clutchBias + teamBias,
+          ),
+        )
+        const dmg = 28 + buffs.power * 4 + Math.floor(Math.random() * 18)
+        if (Math.random() * 100 < chance) {
+          const newHp = e.hp - dmg
+          if (newHp <= 0) {
+            players = players.map((p) =>
+              p.id === e.id ? { ...p, alive: false, hp: 0 } : p,
+            )
+            events.push(`${a.name} fragged ${e.name}`)
+          } else {
+            players = players.map((p) =>
+              p.id === e.id ? { ...p, hp: newHp } : p,
+            )
+            events.push(`${a.name} hit ${e.name} (−${dmg})`)
+          }
         } else {
-          players = players.map((p) =>
-            p.id === a.id ? { ...p, alive: false } : p,
-          )
-          events.push(`${e.name} fragged ${a.name}`)
+          const newHp = a.hp - dmg
+          if (newHp <= 0) {
+            players = players.map((p) =>
+              p.id === a.id ? { ...p, alive: false, hp: 0 } : p,
+            )
+            events.push(`${e.name} fragged ${a.name}`)
+          } else {
+            players = players.map((p) =>
+              p.id === a.id ? { ...p, hp: newHp } : p,
+            )
+            events.push(`${e.name} hit ${a.name} (−${dmg})`)
+          }
         }
       }
     }
@@ -300,13 +456,13 @@ export function tickMatch(state: MatchState, upgrades: Upgrade[] = []): MatchSta
   const roundOver = timeLeft <= 0 || alliesAlive === 0 || enemiesAlive === 0
 
   if (roundOver) {
-    const sitePressure = buffs.strategy * 0.04
+    const sitePressure = buffs.strategy * 0.06
     const allyWonRound =
       enemiesAlive === 0 ||
       (alliesAlive > 0 &&
         timeLeft <= 0 &&
-        Math.random() * 100 < state.winChance + buffs.clutch * 2) ||
-      (alliesAlive > enemiesAlive && Math.random() < 0.5 + sitePressure)
+        Math.random() * 100 < state.winChance + buffs.clutch * 3.5) ||
+      (alliesAlive > enemiesAlive && Math.random() < 0.48 + sitePressure)
 
     if (allyWonRound) {
       allyScore += 1
@@ -333,16 +489,26 @@ export function tickMatch(state: MatchState, upgrades: Upgrade[] = []): MatchSta
         players,
         events: events.slice(-8),
         result,
+        orderMarker: null,
       }
     }
 
     timeLeft = 55
+    orderMarker = null
     players = players.map((p, _i, all) => {
       const spawns = p.team === 'ally' ? map.allySpawns : map.enemySpawns
       const idx = all.filter((x) => x.team === p.team).findIndex((x) => x.id === p.id)
       return spawnPlayer(
         map,
-        { id: p.id, name: p.name, team: p.team },
+        {
+          id: p.id,
+          squadId: p.squadId,
+          name: p.name,
+          team: p.team,
+          maxHp: p.maxHp,
+          combat: p.combat,
+          speed: p.speed,
+        },
         spawns[idx] ?? spawns[0],
       )
     })
@@ -364,6 +530,7 @@ export function tickMatch(state: MatchState, upgrades: Upgrade[] = []): MatchSta
     winChance: Math.round(winChance),
     players,
     events: events.slice(-8),
+    orderMarker,
   }
 }
 
@@ -374,33 +541,35 @@ export function formatClock(seconds: number): string {
 }
 
 export function idlePreviewPlayers(map: GameMap): MatchPlayer[] {
-  const ally = map.allySpawns.slice(0, 2).map((id, i) => {
-    const z = zoneById(map, id)
+  const mk = (
+    id: string,
+    name: string,
+    team: 'ally' | 'enemy',
+    zoneId: string,
+  ): MatchPlayer => {
+    const z = zoneById(map, zoneId)
     return {
-      id: `preview_a${i}`,
-      name: 'ready',
-      team: 'ally' as const,
+      id,
+      squadId: null,
+      name,
+      team,
       x: z.x,
       y: z.y,
       alive: true,
+      hp: 100,
+      maxHp: 100,
+      combat: 50,
+      speed: 1,
       targetX: z.x,
       targetY: z.y,
       waypoints: [],
+      orderedTicks: 0,
     }
-  })
-  const enemy = map.enemySpawns.slice(0, 2).map((id, i) => {
-    const z = zoneById(map, id)
-    return {
-      id: `preview_e${i}`,
-      name: 'wait',
-      team: 'enemy' as const,
-      x: z.x,
-      y: z.y,
-      alive: true,
-      targetX: z.x,
-      targetY: z.y,
-      waypoints: [],
-    }
-  })
-  return [...ally, ...enemy]
+  }
+  return [
+    ...map.allySpawns.slice(0, 2).map((id, i) => mk(`preview_a${i}`, 'ready', 'ally', id)),
+    ...map.enemySpawns.slice(0, 2).map((id, i) => mk(`preview_e${i}`, 'wait', 'enemy', id)),
+  ]
 }
+
+export { playerPower }

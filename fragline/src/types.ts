@@ -54,10 +54,8 @@ export interface Upgrade {
   blurb: string
   icon: string
   level: number
-  /** Contribution to displayed team power */
   powerPerLevel: number
   baseCost: number
-  /** Which match stat this upgrades */
   stat: UpgradeStat
 }
 
@@ -75,15 +73,24 @@ export type MatchPhase = 'idle' | 'live' | 'result'
 
 export interface MatchPlayer {
   id: string
+  /** Links to squad Player.id for allies; null for AI */
+  squadId: string | null
   name: string
   team: 'ally' | 'enemy'
   x: number
   y: number
   alive: boolean
+  hp: number
+  maxHp: number
+  /** Individual combat rating from unit skills */
+  combat: number
+  /** Per-unit move speed multiplier */
+  speed: number
   targetX: number
   targetY: number
-  /** World waypoints along free-roam grid path (around walls) */
   waypoints: { x: number; y: number }[]
+  /** Ticks remaining where AI won't override a manual move order */
+  orderedTicks: number
 }
 
 export interface MatchState {
@@ -100,6 +107,9 @@ export interface MatchState {
   events: string[]
   opponentId: string | null
   result: 'win' | 'draw' | 'loss' | null
+  selectedUnitId: string | null
+  /** World marker for last issued move order */
+  orderMarker: { x: number; y: number } | null
 }
 
 export interface GameState {

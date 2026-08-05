@@ -69,6 +69,122 @@
 .match-meta {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.buff-strip {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.buff-strip span {
+  text-align: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 4px 2px;
+  border-radius: 8px;
+  background: rgba(58, 160, 255, 0.1);
+  border: 1px solid rgba(58, 160, 255, 0.2);
+  color: #b7d8ff;
+}
+
+.map-cycle {
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 0.68rem;
+  margin-left: auto;
+}
+
+.battle-dock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.unit-rail {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.unit-chip {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  min-width: 88px;
+}
+
+.unit-chip strong {
+  font-size: 0.78rem;
+}
+
+.unit-chip span {
+  font-size: 0.62rem;
+  color: var(--muted);
+}
+
+.unit-chip.active {
+  border-color: rgba(58, 160, 255, 0.55);
+  background: var(--ally-dim);
+}
+
+.unit-chip.dead {
+  opacity: 0.45;
+}
+
+.unit-train {
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--line);
+}
+
+.unit-train p {
+  margin: 2px 0 0;
+  font-size: 0.7rem;
+}
+
+.quick-skills {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.skill-quick {
+  flex-direction: column;
+  gap: 1px;
+  min-height: 54px;
+  padding: 6px 4px;
+}
+
+.skill-quick em {
+  font-style: normal;
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.skill-quick strong {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.05rem;
+  color: var(--ally);
+}
+
+.skill-quick small {
+  font-size: 0.6rem;
+  opacity: 0.85;
 }
 
 .score-chip,
