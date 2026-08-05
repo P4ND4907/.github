@@ -103,7 +103,8 @@ export function MatchPanel() {
             }`}
             onClick={() => jumpToUpgrade(b.id)}
           >
-            <em>{b.label}</em> {b.value}
+            <em>{b.label}</em>{' '}
+            {Number.isInteger(b.value) ? b.value : b.value.toFixed(1)}
           </button>
         ))}
       </div>
