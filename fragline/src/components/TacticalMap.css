@@ -151,30 +151,44 @@
 }
 
 .map-block {
-  fill: rgba(8, 10, 14, 0.82);
-  stroke: rgba(140, 160, 190, 0.22);
+  fill: rgba(8, 10, 14, 0.88);
+  stroke: rgba(140, 160, 190, 0.28);
   stroke-width: 0.55;
 }
 
 .map-corridor {
-  stroke: color-mix(in srgb, var(--map-accent, #3aa0ff) 28%, transparent);
-  stroke-width: 5.5;
+  stroke: color-mix(in srgb, var(--map-accent, #3aa0ff) 32%, transparent);
+  stroke-width: 7.5;
   stroke-linecap: round;
-  opacity: 0.85;
+  opacity: 0.55;
 }
 
 .site-ring {
-  fill: rgba(255, 200, 87, 0.08);
-  stroke: rgba(255, 200, 87, 0.55);
-  stroke-width: 0.6;
+  fill: rgba(255, 200, 87, 0.1);
+  stroke: rgba(255, 200, 87, 0.65);
+  stroke-width: 0.7;
+}
+
+.site-core {
+  fill: rgba(255, 200, 87, 0.22);
 }
 
 .site-label {
   fill: var(--warn);
   font-family: var(--font-display);
-  font-size: 5px;
+  font-size: 5.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
+}
+
+.zone-label {
+  fill: rgba(190, 210, 235, 0.28);
+  font-family: var(--font-display);
+  font-size: 3.4px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  pointer-events: none;
 }
 
 .pawn {

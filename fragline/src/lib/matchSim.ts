@@ -210,7 +210,7 @@ export function startMatch(
     maxRounds: 16,
     allyScore: 0,
     enemyScore: 0,
-    timeLeft: 55,
+    timeLeft: 70,
     winChance,
     mapId: map.id,
     mapName: map.name,
@@ -425,7 +425,7 @@ function pickDestination(
   }
 
   const here = worldToCell(p.x, p.y)
-  const roamRadius = 3 + Math.min(6, Math.floor(buffs.intelligence / 2 + memoryBias * 2))
+  const roamRadius = 4 + Math.min(8, Math.floor(buffs.intelligence / 2 + memoryBias * 3))
   for (let attempt = 0; attempt < 6; attempt++) {
     const cell = randomOpenCell(map, here, roamRadius)
     if (!allyTargets.has(`${cell.col},${cell.row}`)) return cell
@@ -600,8 +600,8 @@ export function tickMatch(
     ? buffsWithBrain(buffsFromUpgrades(upgrades), brain)
     : buffsFromUpgrades(upgrades)
   const mapFam = brain ? mapFamiliarity(brain, state.mapId) : 0
-  // Smooth glide speed in map-units / second
-  const teamSpeed = 11 + buffs.reflex * 1.8
+  // Smooth glide speed in map-units / second — larger arenas need more pace
+  const teamSpeed = 14 + buffs.reflex * 2.1
 
   let timeLeft = state.timeLeft - dt
   let round = state.round
@@ -695,7 +695,7 @@ export function tickMatch(
             : best,
         )
         const d = Math.hypot(nearest.x - p.x, nearest.y - p.y)
-        if (d > 12 && d < 48 && hasLineOfSight(map, p.x, p.y, nearest.x, nearest.y)) {
+        if (d > 14 && d < 58 && hasLineOfSight(map, p.x, p.y, nearest.x, nearest.y)) {
           const thrown = throwFrag(p, nearest.x, nearest.y)
           gadgets = [...gadgets, thrown.gadget]
           fx.push(thrown.fx)
@@ -761,8 +761,8 @@ export function tickMatch(
   }
 
   // Skirmish only with clear line of sight (no wall-banging)
-  const fightChance = (0.55 + buffs.utility * 0.08) * dt
-  const fightRange = 22 + buffs.utility * 4
+  const fightChance = (0.5 + buffs.utility * 0.07) * dt
+  const fightRange = 28 + buffs.utility * 5
 
   if (Math.random() < fightChance) {
     const aliveAllies = players.filter((p) => p.alive && p.team === 'ally')
@@ -918,7 +918,7 @@ export function tickMatch(
       }
     }
 
-    timeLeft = 55
+    timeLeft = 70
     orderMarker = null
     fx = []
     gadgets = []

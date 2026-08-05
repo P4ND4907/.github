@@ -22,7 +22,7 @@ function effectLine(u: Upgrade): string {
     case 'strategy':
       return `Hold / flank IQ · site pressure +${(lv * 6).toFixed(0)}%`
     case 'reflex':
-      return `Move speed ${11 + lv * 1.8} u/s`
+      return `Move speed ${14 + lv * 2.1} u/s`
     case 'utility':
       return `Nades & claymores · blast ×${(1 + lv * 0.12).toFixed(2)}`
     case 'clutch':

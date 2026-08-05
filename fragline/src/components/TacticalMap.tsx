@@ -164,13 +164,30 @@ export function TacticalMap({
             <path
               d={`M ${CELL} 0 L 0 0 0 ${CELL}`}
               fill="none"
-              stroke="rgba(255,255,255,0.045)"
-              strokeWidth="0.4"
+              stroke="rgba(255,255,255,0.04)"
+              strokeWidth="0.35"
             />
           </pattern>
-          <radialGradient id={`floor-${map.id}`} cx="50%" cy="50%" r="70%">
-            <stop offset="0%" stopColor="#243041" />
-            <stop offset="100%" stopColor="#141a22" />
+          <pattern
+            id={`hatch-${map.id}`}
+            width="6"
+            height="6"
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(35)"
+          >
+            <line
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="6"
+              stroke="rgba(255,255,255,0.035)"
+              strokeWidth="1.2"
+            />
+          </pattern>
+          <radialGradient id={`floor-${map.id}`} cx="50%" cy="45%" r="75%">
+            <stop offset="0%" stopColor="#2a3648" />
+            <stop offset="55%" stopColor="#1a222e" />
+            <stop offset="100%" stopColor="#10151c" />
           </radialGradient>
           <linearGradient id="tracer-ally" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="rgba(58,160,255,0)" />
@@ -186,6 +203,7 @@ export function TacticalMap({
 
         <rect x="0" y="0" width={size} height={size} fill={`url(#floor-${map.id})`} />
         <rect x="0" y="0" width={size} height={size} fill={`url(#grid-${map.id})`} />
+        <rect x="0" y="0" width={size} height={size} fill={`url(#hatch-${map.id})`} />
 
         {corridors.map((c) => (
           <line
@@ -205,15 +223,31 @@ export function TacticalMap({
             y={b.y}
             width={b.w}
             height={b.h}
-            rx="1.2"
+            rx={Math.min(1.4, Math.min(b.w, b.h) * 0.15)}
             className="map-block"
           />
         ))}
 
+        {/* Callout labels for named rooms / lanes */}
+        {map.zones
+          .filter((z) => !z.site)
+          .map((z) => (
+            <text
+              key={`lbl-${z.id}`}
+              x={z.x}
+              y={z.y + 0.6}
+              textAnchor="middle"
+              className="zone-label"
+            >
+              {z.label}
+            </text>
+          ))}
+
         {sites.map((z) => (
           <g key={z.id} className="site-marker">
-            <circle cx={z.x} cy={z.y} r="6.5" className="site-ring" />
-            <text x={z.x} y={z.y + 2} textAnchor="middle" className="site-label">
+            <circle cx={z.x} cy={z.y} r="7.2" className="site-ring" />
+            <circle cx={z.x} cy={z.y} r="3.2" className="site-core" />
+            <text x={z.x} y={z.y + 2.2} textAnchor="middle" className="site-label">
               {z.site}
             </text>
           </g>
