@@ -78,7 +78,7 @@ export function startMatch(
     maxRounds: 16,
     allyScore: 0,
     enemyScore: 0,
-    timeLeft: 95,
+    timeLeft: 55,
     winChance,
     mapName: 'DUSTLINE',
     players: [...allies, ...enemies],
@@ -133,7 +133,7 @@ export function tickMatch(state: MatchState): MatchState {
   const events = [...state.events]
 
   // Combat skirmishes near teammates
-  if (Math.random() < 0.22) {
+  if (Math.random() < 0.32) {
     const aliveAllies = players.filter((p) => p.alive && p.team === 'ally')
     const aliveEnemies = players.filter((p) => p.alive && p.team === 'enemy')
     if (aliveAllies.length && aliveEnemies.length) {
@@ -193,7 +193,7 @@ export function tickMatch(state: MatchState): MatchState {
     }
 
     // Reset round
-    timeLeft = 95
+    timeLeft = 55
     players = players.map((p) => {
       const spawnIds =
         p.team === 'ally'

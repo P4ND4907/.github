@@ -20,7 +20,7 @@ export default function App() {
 
   useEffect(() => {
     if (matchPhase !== 'live') return
-    const id = window.setInterval(() => tickLiveMatch(), 700)
+    const id = window.setInterval(() => tickLiveMatch(), 550)
     return () => window.clearInterval(id)
   }, [matchPhase, tickLiveMatch])
 

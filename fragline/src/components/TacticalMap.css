@@ -51,7 +51,8 @@
 }
 
 .pawn {
-  transition: transform 180ms linear;
+  transition: transform 220ms linear;
+  will-change: transform;
 }
 
 .pawn-body {

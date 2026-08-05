@@ -11,7 +11,9 @@ export function MatchPanel() {
   const playMatch = useGameStore((s) => s.playMatch)
   const dismissResult = useGameStore((s) => s.dismissResult)
 
-  const opponent = standings.find((t) => t.id === match.opponentId)
+  const opponent =
+    standings.find((t) => t.id === match.opponentId) ??
+    standings.find((t) => !t.isPlayer)
   const enemyName = opponent?.name ?? 'Rival Squad'
   const enemyPower = opponent?.power ?? Math.round(teamPower * 0.9)
   const live = match.phase === 'live'
