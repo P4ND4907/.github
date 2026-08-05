@@ -2,7 +2,15 @@
 
 This repository provides default safety, contribution, issue, pull request, and tester-feedback templates for P4ND4907 projects.
 
-GitHub uses these files as fallbacks for repositories owned by this account that do not define their own versions. Project-specific templates can still override these defaults when a repo needs tighter rules.
+## FRAGLINE
+
+Playable idle esports manager lives in [`fragline/`](./fragline/README.md):
+
+```bash
+cd fragline
+npm install
+npm run dev
+```
 
 ## Tester Feedback
 
