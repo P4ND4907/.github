@@ -27,7 +27,9 @@ export function Header() {
           <strong>{gems}</strong>
         </div>
         <div className="res power" title="Team power">
-          <span className="res-label">⚡</span>
+          <span className="res-label power-mark" aria-hidden>
+            P
+          </span>
           <strong>{teamPower}</strong>
         </div>
       </div>

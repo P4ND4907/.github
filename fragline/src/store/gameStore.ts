@@ -111,6 +111,9 @@ interface GameStore extends GameState {
   refreshMarket: () => void
   renameTeam: (name: string) => void
   promoteIfReady: () => void
+  /** UI flash — which upgrade was just purchased */
+  lastUpgradeId: string | null
+  lastUpgradeAt: number
 }
 
 function initialState(): GameState {
@@ -142,6 +145,8 @@ export const useGameStore = create<GameStore>()(
     (set, get) => ({
       ...initialState(),
       screen: 'home',
+      lastUpgradeId: null,
+      lastUpgradeAt: 0,
 
       setScreen: (screen) => set({ screen }),
 
@@ -309,18 +314,33 @@ export const useGameStore = create<GameStore>()(
         if (!upgrade) return
         const cost = Math.round(upgrade.baseCost * Math.pow(1.35, upgrade.level - 1))
         if (s.cash < cost) return
+        const nextLevel = upgrade.level + 1
         const upgrades = s.upgrades.map((u) =>
-          u.id === id ? { ...u, level: u.level + 1 } : u,
+          u.id === id ? { ...u, level: nextLevel } : u,
         )
         const teamPower = syncPower(s.squad, upgrades)
+        const live = s.match.phase === 'live'
+        const match = live
+          ? {
+              ...s.match,
+              winChance: Math.min(92, s.match.winChance + (upgrade.stat === 'power' ? 2 : 1)),
+              events: [
+                ...s.match.events,
+                `${upgrade.name} ONLINE · Lv.${nextLevel}`,
+              ].slice(-10),
+            }
+          : s.match
         set({
           cash: s.cash - cost,
           upgrades,
           teamPower,
+          match,
           incomePerSec: calcIncome(teamPower, s.leagueIndex),
           standings: s.standings.map((t) =>
             t.isPlayer ? { ...t, power: teamPower } : t,
           ),
+          lastUpgradeId: id,
+          lastUpgradeAt: Date.now(),
         })
       },
 

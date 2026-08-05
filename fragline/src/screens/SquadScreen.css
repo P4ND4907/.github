@@ -52,7 +52,7 @@
 }
 
 .squad-power strong {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-display);
   font-size: 1.1rem;
 }
 
@@ -81,7 +81,7 @@
 }
 
 .power-badge strong {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-display);
   font-size: 1.3rem;
   color: var(--warn);
 }

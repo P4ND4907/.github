@@ -10,8 +10,8 @@ export function makeGadgetId() {
 
 /** Chance intel spots an enemy claymore when nearby (base per-second rate) */
 export function claymoreSpotChance(intelLevel: number): number {
-  // Lv1 ~22%/s near trap, Lv5 ~54%/s, Lv8 ~78%/s (capped)
-  return Math.min(0.9, 0.14 + intelLevel * 0.08)
+  // Lv1 ~22%/s, Lv2 ~34%, Lv5 ~58%, Lv8 ~82%
+  return Math.min(0.92, 0.1 + intelLevel * 0.12)
 }
 
 export function trySpotClaymores(

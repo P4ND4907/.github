@@ -79,16 +79,38 @@
   gap: 4px;
 }
 
-.buff-strip span {
+.buff-chip {
   text-align: center;
-  font-size: 0.62rem;
-  font-weight: 700;
+  font-family: var(--font-mono);
+  font-size: 0.64rem;
+  font-weight: 600;
   letter-spacing: 0.02em;
-  padding: 4px 2px;
+  padding: 5px 2px;
   border-radius: 8px;
   background: rgba(58, 160, 255, 0.1);
-  border: 1px solid rgba(58, 160, 255, 0.2);
+  border: 1px solid rgba(58, 160, 255, 0.22);
   color: #b7d8ff;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 140ms ease;
+}
+
+.buff-chip em {
+  font-style: normal;
+  color: #7eb6ef;
+  margin-right: 2px;
+}
+
+.buff-chip:active {
+  transform: scale(0.96);
+}
+
+.buff-chip.flash {
+  background: rgba(47, 214, 123, 0.22);
+  border-color: rgba(47, 214, 123, 0.55);
+  color: #d8ffe8;
+  animation: upgradePop 520ms ease;
 }
 
 .map-cycle {
@@ -100,7 +122,7 @@
 
 .streak-banner {
   text-align: center;
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-display);
   letter-spacing: 0.1em;
   font-size: 0.85rem;
   padding: 7px 10px;
@@ -189,7 +211,7 @@
 }
 
 .skill-quick strong {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-display);
   font-size: 1.05rem;
   color: var(--ally);
 }
@@ -222,7 +244,7 @@
   margin-left: auto;
   color: var(--muted);
   letter-spacing: 0.08em;
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-display);
 }
 
 .map-placeholder {
@@ -266,7 +288,7 @@
 
 .match-feed li.telemetry {
   color: #9eb6d4;
-  font-family: 'IBM Plex Mono', 'IBM Plex Sans', monospace;
+  font-family: var(--font-mono);
   font-size: 0.68rem;
   letter-spacing: 0.02em;
 }
@@ -279,7 +301,7 @@
   border-radius: 8px;
   background: rgba(58, 160, 255, 0.08);
   border: 1px solid rgba(58, 160, 255, 0.18);
-  font-family: 'IBM Plex Mono', 'IBM Plex Sans', monospace;
+  font-family: var(--font-mono);
   font-size: 0.68rem;
   color: #b7c8de;
 }
@@ -314,7 +336,7 @@
 }
 
 .result-banner strong {
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-display);
   font-size: 1.1rem;
   letter-spacing: 0.06em;
 }
@@ -333,7 +355,7 @@
   width: 100%;
   min-height: 48px;
   font-size: 1.05rem;
-  font-family: 'Barlow Condensed', sans-serif;
+  font-family: var(--font-display);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }

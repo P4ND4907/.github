@@ -1,40 +1,85 @@
+import { claymoreSpotChance } from '../lib/gadgets'
 import { formatCash, upgradeCost, useGameStore } from '../store/gameStore'
+import type { Upgrade, UpgradeStat } from '../types'
 import './UpgradePanel.css'
+
+const STAT_MARK: Record<UpgradeStat, string> = {
+  power: 'PWR',
+  intelligence: 'INT',
+  strategy: 'STR',
+  reflex: 'RFX',
+  utility: 'UTL',
+  clutch: 'CLU',
+}
+
+function effectLine(u: Upgrade): string {
+  const lv = u.level
+  switch (u.stat) {
+    case 'power':
+      return `Gunfight bias +${((lv - 1) * 3.5).toFixed(0)}% · live now`
+    case 'intelligence':
+      return `Claymore spot ~${Math.round(claymoreSpotChance(lv) * 100)}%/s near trap`
+    case 'strategy':
+      return `Hold / flank IQ · site pressure +${(lv * 6).toFixed(0)}%`
+    case 'reflex':
+      return `Move speed ${11 + lv * 1.8} u/s`
+    case 'utility':
+      return `Nades & claymores · blast ×${(1 + lv * 0.12).toFixed(2)}`
+    case 'clutch':
+      return `Late-round swing +${(lv * 3.5).toFixed(0)}%`
+    default:
+      return u.blurb
+  }
+}
 
 export function UpgradePanel() {
   const upgrades = useGameStore((s) => s.upgrades)
   const cash = useGameStore((s) => s.cash)
   const buyUpgrade = useGameStore((s) => s.buyUpgrade)
+  const lastUpgradeId = useGameStore((s) => s.lastUpgradeId)
+  const lastUpgradeAt = useGameStore((s) => s.lastUpgradeAt)
+  const flashFresh = Date.now() - lastUpgradeAt < 2200
 
   return (
-    <section className="panel upgrade-panel">
+    <section className="panel upgrade-panel" id="team-upgrades">
       <div className="row space">
         <h2 className="panel-title">Team Upgrades</h2>
-        <span className="pill">Improve match play</span>
+        <span className="pill">Live in every match</span>
       </div>
       <p className="upgrade-lead muted">
-        Power, Intelligence, Strategy and more — each level changes how your squad
-        free-roams, fights, and closes rounds.
+        Tap UPGRADE — levels apply immediately to the buff strip and live sim
+        (Intel spots claymores, Utility throws more frags, etc).
       </p>
       <div className="upgrade-rail">
         {upgrades.map((u) => {
           const cost = upgradeCost(u)
           const canBuy = cash >= cost
+          const flashing = flashFresh && lastUpgradeId === u.id
           return (
-            <article key={u.id} className="upgrade-card">
-              <div className="upgrade-icon" aria-hidden>
-                {u.icon}
+            <article
+              key={u.id}
+              id={`upgrade-${u.id}`}
+              className={`upgrade-card ${flashing ? 'just-bought' : ''} ${
+                canBuy ? 'can-buy' : ''
+              }`}
+            >
+              <div className={`upgrade-icon stat-${u.stat}`} aria-hidden>
+                <span>{STAT_MARK[u.stat]}</span>
               </div>
               <div className="upgrade-body">
                 <strong>{u.name}</strong>
                 <span className="upgrade-level">
-                  Lv. {u.level} · +{u.powerPerLevel} team power
+                  Lv. {u.level}
+                  <em>ACTIVE</em>
                 </span>
+                <span className="upgrade-effect">{effectLine(u)}</span>
                 <span className="upgrade-blurb">{u.blurb}</span>
               </div>
               <button
+                type="button"
                 className="btn btn-warn upgrade-btn"
                 disabled={!canBuy}
+                aria-label={`Upgrade ${u.name} to level ${u.level + 1} for ${formatCash(cost)}`}
                 onClick={() => buyUpgrade(u.id)}
               >
                 UPGRADE

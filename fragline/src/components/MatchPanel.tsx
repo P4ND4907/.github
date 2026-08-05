@@ -31,6 +31,10 @@ export function MatchPanel() {
   const commandSelectedUnit = useGameStore((s) => s.commandSelectedUnit)
   const upgradeSkill = useGameStore((s) => s.upgradeSkill)
 
+  const lastUpgradeId = useGameStore((s) => s.lastUpgradeId)
+  const lastUpgradeAt = useGameStore((s) => s.lastUpgradeAt)
+  const flashFresh = Date.now() - lastUpgradeAt < 2200
+
   const opponent =
     standings.find((t) => t.id === match.opponentId) ??
     standings.find((t) => !t.isPlayer)
@@ -48,6 +52,22 @@ export function MatchPanel() {
   const squadUnit = selected?.squadId
     ? squad.find((p) => p.id === selected.squadId)
     : null
+
+  const buffChips: { id: string; label: string; value: number }[] = [
+    { id: 'power', label: 'PWR', value: buffs.power },
+    { id: 'intelligence', label: 'INT', value: buffs.intelligence },
+    { id: 'strategy', label: 'STR', value: buffs.strategy },
+    { id: 'reflex', label: 'RFX', value: buffs.reflex },
+    { id: 'utility', label: 'UTL', value: buffs.utility },
+    { id: 'clutch', label: 'CLU', value: buffs.clutch },
+  ]
+
+  function jumpToUpgrade(id: string) {
+    document.getElementById(`upgrade-${id}`)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'center',
+    })
+  }
 
   return (
     <section className="panel match-panel">
@@ -71,13 +91,19 @@ export function MatchPanel() {
         </div>
       </div>
 
-      <div className="buff-strip" title="Team upgrades active in this match">
-        <span>PWR {buffs.power}</span>
-        <span>INT {buffs.intelligence}</span>
-        <span>STR {buffs.strategy}</span>
-        <span>RFX {buffs.reflex}</span>
-        <span>UTL {buffs.utility}</span>
-        <span>CLU {buffs.clutch}</span>
+      <div className="buff-strip" title="Team upgrade levels — tap to jump">
+        {buffChips.map((b) => (
+          <button
+            key={b.id}
+            type="button"
+            className={`buff-chip ${
+              flashFresh && lastUpgradeId === b.id ? 'flash' : ''
+            }`}
+            onClick={() => jumpToUpgrade(b.id)}
+          >
+            <em>{b.label}</em> {b.value}
+          </button>
+        ))}
       </div>
 
       <div className="match-meta">

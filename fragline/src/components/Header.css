@@ -32,8 +32,8 @@
 
 .brand strong {
   display: block;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.15rem;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
   letter-spacing: 0.12em;
   line-height: 1;
 }
@@ -76,6 +76,12 @@
 
 .res.power .res-label {
   color: var(--warn);
+}
+
+.res.power .power-mark {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 .res strong {
