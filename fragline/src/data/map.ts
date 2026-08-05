@@ -153,7 +153,7 @@ function fromGrid(
 const DUSTLINE = fromGrid({
   id: 'dustline',
   name: 'DUSTLINE',
-  accent: '#3aa0ff',
+  accent: '#e8c547',
   rows: [
     '########################',
     '#......................#',
@@ -489,7 +489,7 @@ const RAMPART = fromGrid({
 const CANAL = fromGrid({
   id: 'canal',
   name: 'CANAL',
-  accent: '#6ec8ff',
+  accent: '#c4a35a',
   rows: [
     '########################',
     '#......................#',

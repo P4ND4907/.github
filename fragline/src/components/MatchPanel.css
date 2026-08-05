@@ -31,7 +31,7 @@
 }
 
 .side.ally strong {
-  color: #9fd0ff;
+  color: #7eecc0;
 }
 
 .side.enemy {
@@ -53,7 +53,7 @@
 .chance-bar i {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, #2f8fff, #5eb1ff);
+  background: linear-gradient(90deg, #2a9f6a, #3dd68c);
   transition: width 280ms ease;
 }
 
@@ -86,10 +86,10 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   padding: 5px 2px;
-  border-radius: 8px;
-  background: rgba(58, 160, 255, 0.1);
-  border: 1px solid rgba(58, 160, 255, 0.22);
-  color: #b7d8ff;
+  border-radius: 6px;
+  background: rgba(232, 197, 71, 0.08);
+  border: 1px solid rgba(232, 197, 71, 0.22);
+  color: #e8d9a0;
   transition:
     background 160ms ease,
     border-color 160ms ease,
@@ -168,7 +168,7 @@
 }
 
 .unit-chip.active {
-  border-color: rgba(58, 160, 255, 0.55);
+  border-color: rgba(61, 214, 140, 0.55);
   background: var(--ally-dim);
 }
 
@@ -287,7 +287,7 @@
 }
 
 .match-feed li.telemetry {
-  color: #9eb6d4;
+  color: #b8a990;
   font-family: var(--font-mono);
   font-size: 0.68rem;
   letter-spacing: 0.02em;
@@ -299,11 +299,11 @@
   gap: 6px 10px;
   padding: 6px 8px;
   border-radius: 8px;
-  background: rgba(58, 160, 255, 0.08);
-  border: 1px solid rgba(58, 160, 255, 0.18);
+  background: rgba(232, 197, 71, 0.07);
+  border: 1px solid rgba(232, 197, 71, 0.18);
   font-family: var(--font-mono);
   font-size: 0.68rem;
-  color: #b7c8de;
+  color: #cbbda0;
 }
 
 .live-data .warn {

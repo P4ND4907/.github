@@ -50,11 +50,11 @@
 }
 
 .league-table tr.is-you {
-  background: linear-gradient(90deg, rgba(58, 160, 255, 0.22), rgba(58, 160, 255, 0.05));
+  background: linear-gradient(90deg, rgba(232, 197, 71, 0.2), rgba(232, 197, 71, 0.04));
 }
 
 .league-table tr.is-you .team-name {
-  color: #9fd0ff;
+  color: #e8d9a0;
   font-weight: 700;
 }
 

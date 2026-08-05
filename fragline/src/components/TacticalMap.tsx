@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, type MouseEvent } from 'react'
 import { CELL, getMap } from '../data/map'
 import type { CombatFx, Gadget, MatchPlayer } from '../types'
 import './TacticalMap.css'
@@ -37,6 +37,21 @@ export function TacticalMap({
   const targetRef = useRef<PosMap>({})
   const pawnsLayerRef = useRef<SVGGElement>(null)
   const sites = map.zones.filter((z) => z.site)
+
+  const floorPads = useMemo(() => {
+    const pads: { x: number; y: number; key: string }[] = []
+    for (let r = 0; r < map.grid.length; r++) {
+      for (let c = 0; c < map.grid[r].length; c++) {
+        if (map.grid[r][c]) continue
+        pads.push({
+          x: c * CELL + 0.8,
+          y: r * CELL + 0.8,
+          key: `${c}-${r}`,
+        })
+      }
+    }
+    return pads
+  }, [map])
 
   useEffect(() => {
     const next: PosMap = {}
@@ -90,15 +105,6 @@ export function TacticalMap({
     return () => cancelAnimationFrame(raf)
   }, [mapId])
 
-  const corridors = map.edges
-    .map(([a, b]) => {
-      const za = map.zones.find((z) => z.id === a)
-      const zb = map.zones.find((z) => z.id === b)
-      if (!za || !zb) return null
-      return { x1: za.x, y1: za.y, x2: zb.x, y2: zb.y, key: `${a}-${b}` }
-    })
-    .filter(Boolean) as { x1: number; y1: number; x2: number; y2: number; key: string }[]
-
   function toWorld(e: MouseEvent<SVGSVGElement>) {
     const svg = svgRef.current
     if (!svg) return null
@@ -141,11 +147,43 @@ export function TacticalMap({
     return g.spotted
   })
 
+  const aimBeams = players
+    .filter((p) => p.alive && p.aimTargetId && (p.aimTime ?? 0) > 0.05)
+    .map((p) => {
+      const target = players.find((t) => t.id === p.aimTargetId && t.alive)
+      if (!target) return null
+      const from = renderRef.current[p.id] ?? p
+      const to = renderRef.current[target.id] ?? target
+      return {
+        id: `aim-${p.id}`,
+        team: p.team,
+        x1: from.x,
+        y1: from.y,
+        x2: to.x,
+        y2: to.y,
+        strength: Math.min(1, (p.aimTime ?? 0) / 0.55),
+      }
+    })
+    .filter(Boolean) as {
+    id: string
+    team: 'ally' | 'enemy'
+    x1: number
+    y1: number
+    x2: number
+    y2: number
+    strength: number
+  }[]
+
   return (
     <div
       className={`tactical-map ${live ? 'is-live' : ''} ${interactive ? 'is-interactive' : ''}`}
       style={{ ['--map-accent' as string]: map.accent }}
     >
+      <div className="map-plaque">
+        <span className="map-plaque-kicker">ARENA</span>
+        <strong>{map.name}</strong>
+      </div>
+
       <svg
         ref={svgRef}
         viewBox={`0 0 ${size} ${size}`}
@@ -155,43 +193,31 @@ export function TacticalMap({
         onClick={handleClick}
       >
         <defs>
+          <radialGradient id={`arena-${map.id}`} cx="50%" cy="48%" r="72%">
+            <stop offset="0%" stopColor="#2c241c" />
+            <stop offset="45%" stopColor="#1a1714" />
+            <stop offset="100%" stopColor="#0c0b0a" />
+          </radialGradient>
           <pattern
-            id={`grid-${map.id}`}
+            id={`tile-${map.id}`}
             width={CELL}
             height={CELL}
             patternUnits="userSpaceOnUse"
           >
+            <rect width={CELL} height={CELL} fill="transparent" />
             <path
               d={`M ${CELL} 0 L 0 0 0 ${CELL}`}
               fill="none"
-              stroke="rgba(255,255,255,0.04)"
-              strokeWidth="0.35"
+              stroke="rgba(255,220,180,0.035)"
+              strokeWidth="0.4"
             />
           </pattern>
-          <pattern
-            id={`hatch-${map.id}`}
-            width="6"
-            height="6"
-            patternUnits="userSpaceOnUse"
-            patternTransform="rotate(35)"
-          >
-            <line
-              x1="0"
-              y1="0"
-              x2="0"
-              y2="6"
-              stroke="rgba(255,255,255,0.035)"
-              strokeWidth="1.2"
-            />
-          </pattern>
-          <radialGradient id={`floor-${map.id}`} cx="50%" cy="45%" r="75%">
-            <stop offset="0%" stopColor="#2a3648" />
-            <stop offset="55%" stopColor="#1a222e" />
-            <stop offset="100%" stopColor="#10151c" />
-          </radialGradient>
+          <filter id="wall-depth" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="0.6" stdDeviation="0.5" floodColor="#000" floodOpacity="0.55" />
+          </filter>
           <linearGradient id="tracer-ally" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="rgba(58,160,255,0)" />
-            <stop offset="40%" stopColor="rgba(150,210,255,0.95)" />
+            <stop offset="0%" stopColor="rgba(80,220,180,0)" />
+            <stop offset="40%" stopColor="rgba(120,255,210,0.95)" />
             <stop offset="100%" stopColor="#fff" />
           </linearGradient>
           <linearGradient id="tracer-enemy" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -201,75 +227,99 @@ export function TacticalMap({
           </linearGradient>
         </defs>
 
-        <rect x="0" y="0" width={size} height={size} fill={`url(#floor-${map.id})`} />
-        <rect x="0" y="0" width={size} height={size} fill={`url(#grid-${map.id})`} />
-        <rect x="0" y="0" width={size} height={size} fill={`url(#hatch-${map.id})`} />
+        {/* Arena bowl */}
+        <rect x="0" y="0" width={size} height={size} fill={`url(#arena-${map.id})`} />
+        <rect x="0" y="0" width={size} height={size} fill={`url(#tile-${map.id})`} />
 
-        {corridors.map((c) => (
-          <line
-            key={c.key}
-            x1={c.x1}
-            y1={c.y1}
-            x2={c.x2}
-            y2={c.y2}
-            className="map-corridor"
-          />
-        ))}
-
-        {map.blocks.map((b, i) => (
-          <rect
-            key={i}
-            x={b.x}
-            y={b.y}
-            width={b.w}
-            height={b.h}
-            rx={Math.min(1.4, Math.min(b.w, b.h) * 0.15)}
-            className="map-block"
-          />
-        ))}
-
-        {/* Callout labels for named rooms / lanes */}
-        {map.zones
-          .filter((z) => !z.site)
-          .map((z) => (
-            <text
-              key={`lbl-${z.id}`}
-              x={z.x}
-              y={z.y + 0.6}
-              textAnchor="middle"
-              className="zone-label"
-            >
-              {z.label}
-            </text>
+        {/* Walkable floor pads — readable geometry without graph lines */}
+        <g className="floor-layer">
+          {floorPads.map((pad) => (
+            <rect
+              key={pad.key}
+              x={pad.x}
+              y={pad.y}
+              width={CELL - 1.6}
+              height={CELL - 1.6}
+              rx="1.1"
+              className="floor-pad"
+            />
           ))}
+        </g>
 
+        {/* Architecture / walls */}
+        <g className="wall-layer" filter="url(#wall-depth)">
+          {map.blocks.map((b, i) => (
+            <rect
+              key={i}
+              x={b.x}
+              y={b.y}
+              width={b.w}
+              height={b.h}
+              rx={Math.min(1.6, Math.min(b.w, b.h) * 0.12)}
+              className="map-block"
+            />
+          ))}
+        </g>
+
+        {/* Bomb sites + spawn plates — architecture cues, not graph edges */}
         {sites.map((z) => (
           <g key={z.id} className="site-marker">
-            <circle cx={z.x} cy={z.y} r="7.2" className="site-ring" />
-            <circle cx={z.x} cy={z.y} r="3.2" className="site-core" />
-            <text x={z.x} y={z.y + 2.2} textAnchor="middle" className="site-label">
+            <rect
+              x={z.x - 7}
+              y={z.y - 7}
+              width="14"
+              height="14"
+              rx="2"
+              className="site-plate"
+            />
+            <text x={z.x} y={z.y + 2.6} textAnchor="middle" className="site-label">
               {z.site}
             </text>
           </g>
         ))}
+        {map.zones
+          .filter((z) => z.id === 'tspawn' || z.id === 'ctspawn')
+          .map((z) => (
+            <text
+              key={`spawn-${z.id}`}
+              x={z.x}
+              y={z.y + 1.8}
+              textAnchor="middle"
+              className={`spawn-mark ${z.id === 'tspawn' ? 'spawn-t' : 'spawn-ct'}`}
+            >
+              {z.id === 'tspawn' ? 'T' : 'CT'}
+            </text>
+          ))}
 
-        {/* Gadgets — enemy claymores only if spotted by Intelligence */}
+        {/* Aim lasers — unique broadcast cue while locking a target */}
+        <g className="aim-layer">
+          {aimBeams.map((b) => (
+            <line
+              key={b.id}
+              x1={b.x1}
+              y1={b.y1}
+              x2={b.x2}
+              y2={b.y2}
+              className={`aim-beam ${b.team}`}
+              opacity={0.25 + b.strength * 0.55}
+              strokeWidth={0.45 + b.strength * 0.55}
+            />
+          ))}
+        </g>
+
         <g className="gadget-layer">
           {visibleGadgets.map((g) => {
             if (g.kind === 'claymore') {
-              const arm = ((g.facing * 180) / Math.PI)
+              const arm = (g.facing * 180) / Math.PI
               const pulsing = g.fuse <= 0
               return (
                 <g
                   key={g.id}
-                  className={`gadget-claymore ${g.team} ${g.spotted || g.team === 'ally' ? 'known' : ''} ${pulsing ? 'armed' : ''}`}
+                  className={`gadget-claymore ${g.team} ${pulsing ? 'armed' : ''}`}
                   transform={`translate(${g.x} ${g.y}) rotate(${arm})`}
                 >
                   <polygon points="0,-2.2 4.5,3.2 -4.5,3.2" className="clay-body" />
-                  <line x1="0" y1="0" x2="9" y2="0" className="clay-cone" />
-                  <title>
-                    {g.team === 'ally' ? 'Ally claymore' : 'Enemy claymore (spotted)'}
-                  </title>
+                  <line x1="0" y1="0" x2="8" y2="0" className="clay-cone" />
                 </g>
               )
             }
@@ -281,9 +331,8 @@ export function TacticalMap({
                   className={`gadget-frag ${g.team}`}
                   transform={`translate(${g.x} ${g.y})`}
                 >
-                  <circle r={2.4 + (1 - Math.min(1, t)) * 1.2} className="frag-body" />
-                  <circle r="1.1" className="frag-pin" />
-                  <title>Frag · {t.toFixed(1)}s</title>
+                  <circle r={2.2 + (1 - Math.min(1, t)) * 1.1} className="frag-body" />
+                  <circle r="0.9" className="frag-pin" />
                 </g>
               )
             }
@@ -311,14 +360,7 @@ export function TacticalMap({
               const ty = f.fromY + dy * Math.max(0, progress - 0.22)
               const angle = (Math.atan2(dy, dx) * 180) / Math.PI
               return (
-                <g key={f.id} className={`fx-shot ${f.team}`} opacity={0.4 + t * 0.6}>
-                  <line
-                    x1={f.fromX}
-                    y1={f.fromY}
-                    x2={f.toX}
-                    y2={f.toY}
-                    className="fx-beam"
-                  />
+                <g key={f.id} className={`fx-shot ${f.team}`} opacity={0.45 + t * 0.55}>
                   <line
                     x1={tx}
                     y1={ty}
@@ -330,12 +372,12 @@ export function TacticalMap({
                   <circle
                     cx={f.fromX}
                     cy={f.fromY}
-                    r={1.4 + (1 - t) * 1.6}
+                    r={1.3 + (1 - t) * 1.4}
                     className="fx-muzzle"
                   />
                   <g transform={`translate(${f.fromX} ${f.fromY}) rotate(${angle})`}>
                     <polygon
-                      points="0,0 3.2,-1.3 3.2,1.3"
+                      points="0,0 3,-1.2 3,1.2"
                       className="fx-muzzle-flare"
                       opacity={t}
                     />
@@ -345,7 +387,7 @@ export function TacticalMap({
             }
 
             if (f.kind === 'nade') {
-              const scale = 0.7 + (1 - t) * 2.8
+              const scale = 0.7 + (1 - t) * 2.6
               return (
                 <g
                   key={f.id}
@@ -354,7 +396,7 @@ export function TacticalMap({
                   opacity={Math.min(1, t * 1.5)}
                 >
                   <circle r={5 * scale} className="fx-nade-ring" />
-                  <circle r={2.2 * scale} className="fx-nade-core" />
+                  <circle r={2 * scale} className="fx-nade-core" />
                 </g>
               )
             }
@@ -369,19 +411,12 @@ export function TacticalMap({
                   opacity={t}
                 >
                   <circle r={4 * scale} className="fx-clay-blast" />
-                  <line
-                    x1={0}
-                    y1={0}
-                    x2={f.toX - f.fromX}
-                    y2={f.toY - f.fromY}
-                    className="fx-clay-beam"
-                  />
                 </g>
               )
             }
 
             if (f.kind === 'hit') {
-              const scale = 0.6 + (1 - t) * 1.4
+              const scale = 0.6 + (1 - t) * 1.3
               return (
                 <g
                   key={f.id}
@@ -389,27 +424,13 @@ export function TacticalMap({
                   transform={`translate(${f.toX} ${f.toY})`}
                   opacity={t}
                 >
-                  <circle r={2.4 * scale} className="fx-hit-ring" />
-                  <circle r={1 * scale} className="fx-hit-core" />
-                  {[0, 60, 120, 180, 240, 300].map((deg) => {
-                    const rad = (deg * Math.PI) / 180
-                    const reach = 3 * scale
-                    return (
-                      <line
-                        key={deg}
-                        x1={Math.cos(rad) * 0.6}
-                        y1={Math.sin(rad) * 0.6}
-                        x2={Math.cos(rad) * reach}
-                        y2={Math.sin(rad) * reach}
-                        className="fx-spark"
-                      />
-                    )
-                  })}
+                  <circle r={2.2 * scale} className="fx-hit-ring" />
+                  <circle r={0.9 * scale} className="fx-hit-core" />
                 </g>
               )
             }
 
-            const scale = 0.8 + (1 - t) * 2.2
+            const scale = 0.8 + (1 - t) * 2
             return (
               <g
                 key={f.id}
@@ -417,12 +438,8 @@ export function TacticalMap({
                 transform={`translate(${f.toX} ${f.toY})`}
                 opacity={Math.min(1, t * 1.4)}
               >
-                <circle r={3.8 * scale} className="fx-kill-blast" />
-                <circle r={1.8 * scale} className="fx-kill-core" />
-                <path
-                  d={`M0 ${-3.4 * scale} L${1.5 * scale} ${1.9 * scale} L${-1.5 * scale} ${1.9 * scale} Z`}
-                  className="fx-kill-flame"
-                />
+                <circle r={3.6 * scale} className="fx-kill-blast" />
+                <circle r={1.5 * scale} className="fx-kill-core" />
               </g>
             )
           })}
@@ -431,6 +448,7 @@ export function TacticalMap({
         <g ref={pawnsLayerRef}>
           {players.map((p) => {
             const pos = renderRef.current[p.id] ?? p
+            const aiming = !!p.aimTargetId
             return (
               <g
                 key={p.id}
@@ -439,39 +457,47 @@ export function TacticalMap({
                   p.id === selectedUnitId ? 'selected' : ''
                 } ${p.orderedTime > 0 ? 'ordered' : ''} ${
                   p.firingTime > 0 ? 'firing' : ''
-                }`}
+                } ${aiming ? 'aiming' : ''}`}
                 transform={`translate(${pos.x} ${pos.y})`}
               >
-                <circle r="3.4" className="pawn-body" />
-                <circle r="4.2" className="pawn-ring" />
-                {p.firingTime > 0 && <circle r="5.6" className="pawn-fire-ring" />}
+                {/* Operator silhouette — not a plain orb */}
+                <circle r="4.6" className="pawn-glow" />
+                <circle r="3.3" className="pawn-body" />
+                <polygon points="0,-4.8 2.2,-1.6 -2.2,-1.6" className="pawn-chevron" />
+                {p.firingTime > 0 && <circle r="5.4" className="pawn-fire-ring" />}
                 {p.alive && (
-                  <rect
-                    x="-4.5"
-                    y="4.6"
-                    width="9"
-                    height="1.7"
-                    rx="0.5"
-                    className="hp-bg"
-                  />
+                  <rect x="-4.4" y="4.8" width="8.8" height="1.5" rx="0.4" className="hp-bg" />
                 )}
                 {p.alive && (
                   <rect
-                    x="-4.5"
-                    y="4.6"
-                    width={9 * Math.max(0, p.hp / p.maxHp)}
-                    height="1.7"
-                    rx="0.5"
+                    x="-4.4"
+                    y="4.8"
+                    width={8.8 * Math.max(0, p.hp / p.maxHp)}
+                    height="1.5"
+                    rx="0.4"
                     className={`hp-fill ${p.team}`}
                   />
                 )}
-                <text y="-5.2" textAnchor="middle" className="pawn-name">
+                <text y="-6.2" textAnchor="middle" className="pawn-name">
                   {p.name}
                 </text>
               </g>
             )
           })}
         </g>
+
+        {/* Soft edge vignette — dark frame, no blue graph overlay */}
+        <rect
+          x={0}
+          y={0}
+          width={size}
+          height={size}
+          className="map-vignette"
+          fill="none"
+          stroke="rgba(0,0,0,0.55)"
+          strokeWidth={22}
+          pointerEvents="none"
+        />
       </svg>
     </div>
   )

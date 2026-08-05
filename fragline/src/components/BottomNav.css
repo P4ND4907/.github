@@ -31,8 +31,8 @@
 
 .nav-item.active {
   color: var(--text);
-  background: linear-gradient(180deg, rgba(58, 160, 255, 0.18), rgba(58, 160, 255, 0.06));
-  box-shadow: inset 0 0 0 1px rgba(58, 160, 255, 0.25);
+  background: linear-gradient(180deg, rgba(232, 197, 71, 0.16), rgba(232, 197, 71, 0.05));
+  box-shadow: inset 0 0 0 1px rgba(232, 197, 71, 0.28);
 }
 
 .nav-item:active {

@@ -1,313 +1,355 @@
 .tactical-map {
+  --map-accent: #e8c547;
   position: relative;
   width: 100%;
-  aspect-ratio: 1.15 / 1;
-  border-radius: 12px;
+  max-width: min(100%, 92vmin);
+  margin: 0 auto;
+  aspect-ratio: 1;
+  border-radius: 6px;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: #141a22;
-  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.35);
+  border: 1px solid color-mix(in srgb, var(--map-accent) 28%, transparent);
+  background: #0c0b0a;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.65),
+    0 18px 48px rgba(0, 0, 0, 0.55),
+    inset 0 0 60px rgba(0, 0, 0, 0.35);
+  touch-action: none;
+  user-select: none;
 }
 
-.tactical-map.is-live::after {
-  content: 'LIVE';
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  font-family: var(--font-display);
-  font-size: 0.7rem;
-  letter-spacing: 0.14em;
-  color: #04140c;
-  background: var(--go);
-  padding: 2px 7px;
-  border-radius: 4px;
-  animation: fireFlicker 1.2s ease-in-out infinite;
-  z-index: 2;
+.tactical-map.is-live {
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.65),
+    0 18px 48px rgba(0, 0, 0, 0.55),
+    0 0 0 1px color-mix(in srgb, var(--map-accent) 35%, transparent),
+    inset 0 0 60px rgba(0, 0, 0, 0.35);
 }
 
-.tactical-map.is-interactive {
+.tactical-map.is-interactive .map-svg {
   cursor: crosshair;
 }
 
-.tactical-map.is-interactive .pawn.ally {
-  cursor: pointer;
+.map-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
-.pawn.selected .pawn-ring {
-  stroke: #fff;
-  stroke-width: 0.7;
+.map-plaque {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 10px 5px;
+  border-radius: 4px;
+  background: rgba(8, 8, 7, 0.78);
+  border: 1px solid color-mix(in srgb, var(--map-accent) 30%, transparent);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
 }
 
-.pawn.selected .pawn-body {
-  filter: brightness(1.25);
+.map-plaque-kicker {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  color: var(--map-accent);
 }
 
-.pawn.firing .pawn-body {
-  filter: brightness(1.35);
+.map-plaque strong {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f6f0e4;
+  line-height: 1.05;
 }
 
-.pawn-fire-ring {
-  fill: none;
-  stroke: #ffe6a0;
-  stroke-width: 0.55;
-  opacity: 0.85;
-  animation: fireFlicker 0.12s ease-in-out infinite;
-}
-
-.fx-beam {
-  stroke: rgba(255, 255, 255, 0.12);
+/* Warm walkable pads — architecture, not a path graph */
+.floor-pad {
+  fill: rgba(54, 44, 34, 0.72);
+  stroke: rgba(255, 210, 150, 0.04);
   stroke-width: 0.35;
+  pointer-events: none;
+}
+
+.map-block {
+  fill: #1a1714;
+  stroke: rgba(255, 220, 180, 0.07);
+  stroke-width: 0.5;
+}
+
+.site-plate {
+  fill: rgba(232, 197, 71, 0.1);
+  stroke: rgba(232, 197, 71, 0.45);
+  stroke-width: 0.7;
+  pointer-events: none;
+}
+
+.site-label {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 800;
+  fill: rgba(232, 197, 71, 0.85);
+  letter-spacing: 0.08em;
+  pointer-events: none;
+}
+
+.spawn-mark {
+  font-family: var(--font-mono);
+  font-size: 5.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.spawn-mark.spawn-t {
+  fill: #3dd68c;
+}
+
+.spawn-mark.spawn-ct {
+  fill: #e8c547;
+}
+
+.aim-beam {
+  stroke-linecap: round;
+  pointer-events: none;
+  animation: aim-pulse 0.4s ease-in-out infinite alternate;
+}
+
+.aim-beam.ally {
+  stroke: rgba(80, 230, 180, 0.75);
+}
+
+.aim-beam.enemy {
+  stroke: rgba(255, 140, 70, 0.8);
+}
+
+@keyframes aim-pulse {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 0.95;
+  }
+}
+
+.gadget-claymore .clay-body {
+  fill: #c9a227;
+  stroke: #f0d060;
+  stroke-width: 0.4;
+}
+
+.gadget-claymore.enemy .clay-body {
+  fill: #c45a2a;
+  stroke: #ff9a5c;
+}
+
+.gadget-claymore .clay-cone {
+  stroke: rgba(232, 197, 71, 0.55);
+  stroke-width: 0.7;
+  stroke-dasharray: 1.5 1.2;
+}
+
+.gadget-claymore.armed .clay-body {
+  animation: clay-armed 0.9s ease-in-out infinite;
+}
+
+@keyframes clay-armed {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.gadget-frag .frag-body {
+  fill: #3a342c;
+  stroke: #e8c547;
+  stroke-width: 0.5;
+}
+
+.gadget-frag .frag-pin {
+  fill: #f0d060;
+}
+
+.order-marker circle {
+  fill: none;
+  stroke: #e8c547;
+  stroke-width: 1.1;
+  animation: order-ping 1s ease-out infinite;
+}
+
+.order-marker .order-core {
+  fill: #e8c547;
+  stroke: none;
+  animation: none;
+}
+
+@keyframes order-ping {
+  0% {
+    r: 3;
+    opacity: 1;
+  }
+  100% {
+    r: 8;
+    opacity: 0;
+  }
 }
 
 .fx-tracer {
-  stroke-width: 1.15;
+  stroke-width: 1.35;
   stroke-linecap: round;
 }
 
 .fx-muzzle {
-  fill: rgba(255, 230, 160, 0.55);
+  fill: rgba(255, 240, 200, 0.85);
 }
 
 .fx-muzzle-flare {
-  fill: #ffe6a0;
+  fill: #fff6d0;
 }
 
-.fx-shot.ally .fx-muzzle {
-  fill: rgba(150, 210, 255, 0.65);
+.fx-nade-ring {
+  fill: none;
+  stroke: #e8c547;
+  stroke-width: 1.2;
 }
 
-.fx-shot.enemy .fx-muzzle {
-  fill: rgba(255, 180, 100, 0.7);
+.fx-nade-core {
+  fill: rgba(255, 200, 80, 0.85);
 }
 
-.fx-shot.enemy .fx-muzzle-flare {
-  fill: #ffb06a;
+.fx-clay-blast {
+  fill: rgba(255, 180, 60, 0.45);
+  stroke: #e8c547;
+  stroke-width: 0.8;
 }
 
 .fx-hit-ring {
   fill: none;
-  stroke: #ffe6a0;
-  stroke-width: 0.45;
+  stroke: #fff;
+  stroke-width: 0.8;
 }
 
 .fx-hit-core {
-  fill: #fff;
-}
-
-.fx-spark {
-  stroke: #ffc857;
-  stroke-width: 0.45;
-  stroke-linecap: round;
-}
-
-.fx-hit.ally .fx-hit-ring {
-  stroke: #9fd0ff;
-}
-
-.fx-hit.ally .fx-spark {
-  stroke: #9fd0ff;
+  fill: #ffe8a0;
 }
 
 .fx-kill-blast {
-  fill: rgba(255, 122, 47, 0.28);
+  fill: rgba(255, 100, 60, 0.35);
+  stroke: #ff7a2f;
+  stroke-width: 1;
 }
 
 .fx-kill-core {
-  fill: rgba(255, 230, 160, 0.85);
+  fill: #fff;
 }
 
-.fx-kill-flame {
-  fill: #ff8a3d;
+/* Operator pawns */
+.pawn {
+  cursor: pointer;
+}
+
+.pawn.down {
+  opacity: 0.28;
+  pointer-events: none;
+}
+
+.pawn .pawn-glow {
+  fill: transparent;
+  stroke: none;
+}
+
+.pawn.ally .pawn-glow {
+  fill: rgba(61, 214, 140, 0.14);
+}
+
+.pawn.enemy .pawn-glow {
+  fill: rgba(232, 93, 76, 0.14);
+}
+
+.pawn .pawn-body {
+  stroke-width: 1.15;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+}
+
+.pawn.ally .pawn-body {
+  fill: #163528;
+  stroke: #3dd68c;
+}
+
+.pawn.enemy .pawn-body {
+  fill: #3a1a16;
+  stroke: #e85d4c;
+}
+
+.pawn .pawn-chevron {
+  fill: rgba(248, 244, 232, 0.9);
+  pointer-events: none;
+}
+
+.pawn.selected .pawn-body {
+  stroke: #e8c547;
+  stroke-width: 1.55;
+  filter: drop-shadow(0 0 4px rgba(232, 197, 71, 0.55));
+}
+
+.pawn.ordered .pawn-glow {
+  stroke: #e8c547;
+  stroke-width: 0.8;
+  stroke-dasharray: 2 1.5;
+  animation: hold-spin 1.6s linear infinite;
+}
+
+.pawn.firing .pawn-fire-ring {
+  fill: none;
+  stroke: #fff4c0;
+  stroke-width: 0.9;
+  opacity: 0.85;
+}
+
+.pawn.aiming .pawn-chevron {
+  fill: #e8c547;
 }
 
 .hp-bg {
   fill: rgba(0, 0, 0, 0.55);
 }
 
-.hp-fill {
-  fill: var(--go);
+.hp-fill.ally {
+  fill: #3dd68c;
 }
 
 .hp-fill.enemy {
-  fill: var(--enemy);
-}
-
-.order-marker circle {
-  fill: none;
-  stroke: var(--go);
-  stroke-width: 0.55;
-  animation: fireFlicker 1s ease-in-out infinite;
-}
-
-.order-marker .order-core {
-  fill: var(--go);
-  stroke: none;
-}
-
-.map-svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-.map-block {
-  fill: rgba(8, 10, 14, 0.88);
-  stroke: rgba(140, 160, 190, 0.28);
-  stroke-width: 0.55;
-}
-
-.map-corridor {
-  stroke: color-mix(in srgb, var(--map-accent, #3aa0ff) 32%, transparent);
-  stroke-width: 7.5;
-  stroke-linecap: round;
-  opacity: 0.55;
-}
-
-.site-ring {
-  fill: rgba(255, 200, 87, 0.1);
-  stroke: rgba(255, 200, 87, 0.65);
-  stroke-width: 0.7;
-}
-
-.site-core {
-  fill: rgba(255, 200, 87, 0.22);
-}
-
-.site-label {
-  fill: var(--warn);
-  font-family: var(--font-display);
-  font-size: 5.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.zone-label {
-  fill: rgba(190, 210, 235, 0.28);
-  font-family: var(--font-display);
-  font-size: 3.4px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  pointer-events: none;
-}
-
-.pawn {
-  will-change: transform;
-}
-
-.pawn-body {
-  fill: var(--ally);
-}
-
-.pawn.enemy .pawn-body {
-  fill: var(--enemy);
-}
-
-.pawn-ring {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.35);
-  stroke-width: 0.35;
-}
-
-.pawn.ally .pawn-ring {
-  stroke: rgba(58, 160, 255, 0.7);
-}
-
-.pawn.enemy .pawn-ring {
-  stroke: rgba(255, 122, 47, 0.7);
-}
-
-.pawn.down {
-  opacity: 0.28;
-}
-
-.pawn.down .pawn-body {
-  fill: #667084;
+  fill: #e85d4c;
 }
 
 .pawn-name {
-  fill: #f2f6ff;
-  font-size: 3.1px;
-  font-family: var(--font-body);
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 4.8px;
+  font-weight: 700;
+  fill: rgba(248, 244, 232, 0.88);
+  letter-spacing: 0.03em;
+  pointer-events: none;
   paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.85);
-  stroke-width: 0.7px;
+  stroke: rgba(0, 0, 0, 0.75);
+  stroke-width: 0.55px;
 }
 
-.combat-fx {
-  animation: fireFlicker 0.7s ease-in-out infinite;
+@keyframes hold-spin {
+  to {
+    stroke-dashoffset: -12;
+  }
 }
 
-.fx-glow {
-  fill: rgba(255, 122, 47, 0.25);
+.map-vignette {
+  pointer-events: none;
 }
-
-.fx-flame {
-  fill: #ff8a3d;
-}
-
-.gadget-claymore .clay-body {
-  fill: rgba(200, 210, 220, 0.85);
-  stroke: rgba(255, 255, 255, 0.35);
-  stroke-width: 0.35;
-}
-
-.gadget-claymore.enemy .clay-body {
-  fill: rgba(255, 140, 70, 0.9);
-  stroke: rgba(255, 200, 140, 0.55);
-}
-
-.gadget-claymore.ally .clay-body {
-  fill: rgba(90, 170, 255, 0.9);
-}
-
-.gadget-claymore .clay-cone {
-  stroke: rgba(255, 200, 100, 0.45);
-  stroke-width: 0.7;
-  stroke-dasharray: 1.5 1.2;
-}
-
-.gadget-claymore.armed .clay-cone {
-  stroke: rgba(255, 90, 60, 0.75);
-  animation: fireFlicker 0.6s ease-in-out infinite;
-}
-
-.gadget-frag .frag-body {
-  fill: #3a3f48;
-  stroke: #c8d0dc;
-  stroke-width: 0.4;
-}
-
-.gadget-frag.ally .frag-body {
-  stroke: #7ab8ff;
-}
-
-.gadget-frag.enemy .frag-body {
-  stroke: #ff9a5a;
-}
-
-.gadget-frag .frag-pin {
-  fill: #ffc857;
-}
-
-.fx-nade-ring {
-  fill: none;
-  stroke: rgba(255, 200, 87, 0.7);
-  stroke-width: 0.7;
-}
-
-.fx-nade-core {
-  fill: rgba(255, 140, 40, 0.55);
-}
-
-.fx-clay-blast {
-  fill: rgba(255, 100, 40, 0.35);
-}
-
-.fx-clay-beam {
-  stroke: rgba(255, 180, 80, 0.8);
-  stroke-width: 1.4;
-  stroke-linecap: round;
-}
-

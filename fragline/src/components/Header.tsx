@@ -14,7 +14,7 @@ export function Header() {
         <span className="brand-mark" aria-hidden />
         <div>
           <strong>FRAGLINE</strong>
-          <small>Strategy Idle Esports</small>
+          <small>Live Tactical Idle</small>
         </div>
       </div>
       <div className="resources">

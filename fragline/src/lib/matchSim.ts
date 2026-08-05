@@ -228,7 +228,7 @@ export function startMatch(
       `vs ${opponent.name}`,
       iqLine,
       describeBuffs(buffs),
-      'Tap a blue unit, then tap the map to move',
+      'Tap a green unit, then tap the map to move',
     ],
     opponentId: opponent.id,
     result: null,
