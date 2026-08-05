@@ -516,13 +516,12 @@ export function randomOpenCell(map: GameMap, near?: GridPoint, radius = 4): Grid
 }
 
 export function pathToWorld(path: GridPoint[]): { x: number; y: number }[] {
-  return path.map((p) => {
+  return path.map((p, i) => {
     const { x, y } = cellCenter(p.col, p.row)
-    // Keep pawns near cell center so they stay in the corridor
-    return {
-      x: x + (Math.random() * 1.2 - 0.6),
-      y: y + (Math.random() * 1.2 - 0.6),
-    }
+    // Tiny stable offset so stacked units don't fully overlap, no random jump
+    const ox = ((i % 3) - 1) * 0.35
+    const oy = (((i + 1) % 3) - 1) * 0.35
+    return { x: x + ox, y: y + oy }
   })
 }
 

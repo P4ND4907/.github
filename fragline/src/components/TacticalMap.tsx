@@ -1,4 +1,4 @@
-import { useRef, type MouseEvent } from 'react'
+import { useEffect, useRef, type MouseEvent } from 'react'
 import { getMap } from '../data/map'
 import type { MatchPlayer } from '../types'
 import './TacticalMap.css'
@@ -14,6 +14,8 @@ interface Props {
   onCommandMove?: (x: number, y: number) => void
 }
 
+type PosMap = Record<string, { x: number; y: number }>
+
 export function TacticalMap({
   players,
   mapId,
@@ -26,8 +28,66 @@ export function TacticalMap({
 }: Props) {
   const map = getMap(mapId)
   const svgRef = useRef<SVGSVGElement>(null)
+  const renderRef = useRef<PosMap>({})
+  const targetRef = useRef<PosMap>({})
+  const pawnsLayerRef = useRef<SVGGElement>(null)
   const sites = map.zones.filter((z) => z.site)
-  const combatHotspots = players.filter((p) => !p.alive).slice(0, 3)
+
+  // Keep latest sim positions as lerp targets
+  useEffect(() => {
+    const next: PosMap = {}
+    for (const p of players) {
+      next[p.id] = { x: p.x, y: p.y }
+      if (!renderRef.current[p.id]) {
+        renderRef.current[p.id] = { x: p.x, y: p.y }
+      }
+    }
+    targetRef.current = next
+    // Drop stale ids
+    for (const id of Object.keys(renderRef.current)) {
+      if (!next[id]) delete renderRef.current[id]
+    }
+  }, [players])
+
+  // Smooth visual interpolation every frame
+  useEffect(() => {
+    let raf = 0
+    let last = performance.now()
+
+    const frame = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000)
+      last = now
+      // Higher = snappier follow; ~12–16 feels smooth without lag
+      const follow = 1 - Math.exp(-14 * dt)
+
+      const targets = targetRef.current
+      const rendered = renderRef.current
+      for (const id of Object.keys(targets)) {
+        const t = targets[id]
+        const r = rendered[id] ?? t
+        rendered[id] = {
+          x: r.x + (t.x - r.x) * follow,
+          y: r.y + (t.y - r.y) * follow,
+        }
+      }
+
+      const layer = pawnsLayerRef.current
+      if (layer) {
+        for (const node of layer.children) {
+          const el = node as SVGGElement
+          const id = el.dataset.pid
+          if (!id || !rendered[id]) continue
+          const { x, y } = rendered[id]
+          el.setAttribute('transform', `translate(${x} ${y})`)
+        }
+      }
+
+      raf = requestAnimationFrame(frame)
+    }
+
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [mapId])
 
   const corridors = map.edges
     .map(([a, b]) => {
@@ -55,12 +115,13 @@ export function TacticalMap({
     const world = toWorld(e)
     if (!world) return
 
-    // Prefer selecting a nearby ally pawn
     let nearest: MatchPlayer | null = null
     let best = 5.5
+    const rendered = renderRef.current
     for (const p of players) {
       if (p.team !== 'ally' || !p.alive) continue
-      const d = Math.hypot(p.x - world.x, p.y - world.y)
+      const pos = rendered[p.id] ?? p
+      const d = Math.hypot(pos.x - world.x, pos.y - world.y)
       if (d < best) {
         best = d
         nearest = p
@@ -143,51 +204,47 @@ export function TacticalMap({
           </g>
         )}
 
-        {combatHotspots.map((p) => (
-          <g key={`fx-${p.id}`} className="combat-fx">
-            <circle cx={p.x} cy={p.y} r="3.2" className="fx-glow" />
-            <path
-              d={`M ${p.x} ${p.y - 2.2} L ${p.x + 1.2} ${p.y + 1.6} L ${p.x - 1.2} ${p.y + 1.6} Z`}
-              className="fx-flame"
-            />
-          </g>
-        ))}
-
-        {players.map((p) => (
-          <g
-            key={p.id}
-            className={`pawn ${p.team} ${p.alive ? '' : 'down'} ${
-              p.id === selectedUnitId ? 'selected' : ''
-            } ${p.orderedTicks > 0 ? 'ordered' : ''}`}
-            transform={`translate(${p.x} ${p.y})`}
-          >
-            <circle r="3.1" className="pawn-body" />
-            <circle r="3.8" className="pawn-ring" />
-            {p.alive && (
-              <rect
-                x="-4"
-                y="4.2"
-                width="8"
-                height="1.6"
-                rx="0.5"
-                className="hp-bg"
-              />
-            )}
-            {p.alive && (
-              <rect
-                x="-4"
-                y="4.2"
-                width={8 * Math.max(0, p.hp / p.maxHp)}
-                height="1.6"
-                rx="0.5"
-                className={`hp-fill ${p.team}`}
-              />
-            )}
-            <text y="-4.8" textAnchor="middle" className="pawn-name">
-              {p.name}
-            </text>
-          </g>
-        ))}
+        <g ref={pawnsLayerRef}>
+          {players.map((p) => {
+            const pos = renderRef.current[p.id] ?? p
+            return (
+              <g
+                key={p.id}
+                data-pid={p.id}
+                className={`pawn ${p.team} ${p.alive ? '' : 'down'} ${
+                  p.id === selectedUnitId ? 'selected' : ''
+                } ${p.orderedTime > 0 ? 'ordered' : ''}`}
+                transform={`translate(${pos.x} ${pos.y})`}
+              >
+                <circle r="3.1" className="pawn-body" />
+                <circle r="3.8" className="pawn-ring" />
+                {p.alive && (
+                  <rect
+                    x="-4"
+                    y="4.2"
+                    width="8"
+                    height="1.6"
+                    rx="0.5"
+                    className="hp-bg"
+                  />
+                )}
+                {p.alive && (
+                  <rect
+                    x="-4"
+                    y="4.2"
+                    width={8 * Math.max(0, p.hp / p.maxHp)}
+                    height="1.6"
+                    rx="0.5"
+                    className={`hp-fill ${p.team}`}
+                  />
+                )}
+                <text y="-4.8" textAnchor="middle" className="pawn-name">
+                  {p.name}
+                </text>
+              </g>
+            )
+          })}
+        </g>
       </svg>
     </div>
   )

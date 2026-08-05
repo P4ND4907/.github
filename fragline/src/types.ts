@@ -89,8 +89,8 @@ export interface MatchPlayer {
   targetX: number
   targetY: number
   waypoints: { x: number; y: number }[]
-  /** Ticks remaining where AI won't override a manual move order */
-  orderedTicks: number
+  /** Seconds remaining where AI won't override a manual move order */
+  orderedTime: number
 }
 
 export interface MatchState {

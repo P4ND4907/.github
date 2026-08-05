@@ -16,6 +16,8 @@ import type { GameState, Player, Screen, SkillKey, Upgrade } from '../types'
 
 export { formatCash, playerPower, marketPrice, skillUpgradeCost }
 
+let lastMatchTickAt = 0
+
 const DEFAULT_UPGRADES: Upgrade[] = [
   {
     id: 'power',
@@ -169,10 +171,16 @@ export const useGameStore = create<GameStore>()(
       tickLiveMatch: () => {
         const { match, upgrades } = get()
         if (match.phase !== 'live') return
-        const next = tickMatch(match, upgrades)
+        const now = performance.now()
+        const dt = lastMatchTickAt
+          ? Math.min(0.08, Math.max(0.012, (now - lastMatchTickAt) / 1000))
+          : 1 / 30
+        lastMatchTickAt = now
+        const next = tickMatch(match, upgrades, dt)
         set({ match: next })
 
         if (next.phase === 'result' && next.result && next.opponentId) {
+          lastMatchTickAt = 0
           const fragDiff = Math.max(1, Math.abs(next.allyScore - next.enemyScore) * 3 + 2)
           const standings = applyMatchResult(
             get().standings,
@@ -199,6 +207,7 @@ export const useGameStore = create<GameStore>()(
       },
 
       playMatch: () => {
+        lastMatchTickAt = 0
         const s = get()
         if (s.match.phase === 'live') return
         const league = LEAGUES[s.leagueIndex]

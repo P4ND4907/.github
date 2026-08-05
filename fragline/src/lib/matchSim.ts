@@ -64,13 +64,13 @@ function spawnPlayer(
   map: GameMap,
   base: Omit<
     MatchPlayer,
-    'x' | 'y' | 'targetX' | 'targetY' | 'waypoints' | 'alive' | 'orderedTicks' | 'hp'
+    'x' | 'y' | 'targetX' | 'targetY' | 'waypoints' | 'alive' | 'orderedTime' | 'hp'
   >,
   zoneId: string,
 ): MatchPlayer {
   const z = zoneById(map, zoneId)
-  const x = z.x + (Math.random() * 1.6 - 0.8)
-  const y = z.y + (Math.random() * 1.6 - 0.8)
+  const x = z.x + (Math.random() * 0.8 - 0.4)
+  const y = z.y + (Math.random() * 0.8 - 0.4)
   return {
     ...base,
     alive: true,
@@ -80,7 +80,7 @@ function spawnPlayer(
     targetX: x,
     targetY: y,
     waypoints: [],
-    orderedTicks: 0,
+    orderedTime: 0,
   }
 }
 
@@ -188,7 +188,7 @@ function assignRoamPath(
   map: GameMap,
   p: MatchPlayer,
   dest: GridPoint,
-  orderedTicks = 0,
+  orderedTime = 0,
 ): MatchPlayer {
   const from = worldToCell(p.x, p.y)
   let cells = findGridPath(map, from, dest)
@@ -200,7 +200,7 @@ function assignRoamPath(
 
   const world = pathToWorld(cells.slice(1))
   if (!world.length) {
-    return { ...p, waypoints: [], targetX: p.x, targetY: p.y, orderedTicks }
+    return { ...p, waypoints: [], targetX: p.x, targetY: p.y, orderedTime }
   }
 
   const [first, ...rest] = world
@@ -209,7 +209,7 @@ function assignRoamPath(
     waypoints: rest,
     targetX: first.x,
     targetY: first.y,
-    orderedTicks,
+    orderedTime,
   }
 }
 
@@ -235,7 +235,7 @@ export function commandUnitTo(
 
   const players = state.players.map((p) => {
     if (p.id !== unitId || p.team !== 'ally' || !p.alive) return p
-    return assignRoamPath(map, p, cell, 28)
+    return assignRoamPath(map, p, cell, 12)
   })
 
   const unit = players.find((p) => p.id === unitId)
@@ -316,22 +316,23 @@ function retarget(
   p: MatchPlayer,
   winChance: number,
   buffs: MatchBuffs,
+  dt: number,
 ): MatchPlayer {
   if (!p.alive) return p
 
-  // Honor manual orders
-  if (p.orderedTicks > 0) {
-    return { ...p, orderedTicks: p.orderedTicks - 1 }
+  if (p.orderedTime > 0) {
+    return { ...p, orderedTime: Math.max(0, p.orderedTime - dt) }
   }
 
-  const stickChance = 0.86 + buffs.intelligence * 0.02
-  if (p.waypoints.length > 0 && Math.random() < stickChance) return p
+  // Stay on current path — only rarely repath (smooth travel)
+  if (p.waypoints.length > 0) return p
 
   const dist = Math.hypot(p.targetX - p.x, p.targetY - p.y)
-  if (dist > 2.5 && Math.random() < stickChance) return p
+  if (dist > 1.2) return p
 
-  const repathChance = 0.58 - buffs.intelligence * 0.04
-  if (Math.random() > Math.max(0.18, repathChance)) return p
+  // ~repath every 1.2–2.4s depending on intelligence
+  const repathRate = (0.55 - buffs.intelligence * 0.04) * dt
+  if (Math.random() > Math.max(0.08, repathRate)) return p
 
   return assignRoamPath(map, p, pickDestination(map, p, winChance, buffs))
 }
@@ -339,21 +340,26 @@ function retarget(
 function advanceWaypoints(p: MatchPlayer): MatchPlayer {
   if (!p.alive) return p
   const dist = Math.hypot(p.targetX - p.x, p.targetY - p.y)
-  if (dist > 1.6) return p
+  if (dist > 0.85) return p
   if (!p.waypoints.length) return p
   const [next, ...rest] = p.waypoints
   return { ...p, waypoints: rest, targetX: next.x, targetY: next.y }
 }
 
-function moveToward(p: MatchPlayer, teamSpeed: number): MatchPlayer {
+/** units per second in map space (0–100) */
+function moveToward(p: MatchPlayer, teamSpeed: number, dt: number): MatchPlayer {
   if (!p.alive) return p
-  const stepped = advanceWaypoints(p)
+  let stepped = p
+  // Chain a couple waypoint advances if already on top of target
+  for (let i = 0; i < 3; i++) {
+    stepped = advanceWaypoints(stepped)
+  }
   const dx = stepped.targetX - stepped.x
   const dy = stepped.targetY - stepped.y
   const dist = Math.hypot(dx, dy)
-  if (dist < 0.35) return stepped
+  if (dist < 0.15) return stepped
   const speed = teamSpeed * p.speed
-  const step = Math.min(speed, dist)
+  const step = Math.min(speed * dt, dist)
   return {
     ...stepped,
     x: stepped.x + (dx / dist) * step,
@@ -361,31 +367,36 @@ function moveToward(p: MatchPlayer, teamSpeed: number): MatchPlayer {
   }
 }
 
-export function tickMatch(state: MatchState, upgrades: Upgrade[] = []): MatchState {
+export function tickMatch(
+  state: MatchState,
+  upgrades: Upgrade[] = [],
+  dt = 1 / 20,
+): MatchState {
   if (state.phase !== 'live') return state
   const map = getMap(state.mapId)
   const buffs = buffsFromUpgrades(upgrades)
-  const teamSpeed = 1.55 + buffs.reflex * 0.35
+  // Smooth glide speed in map-units / second
+  const teamSpeed = 11 + buffs.reflex * 1.8
 
-  let timeLeft = state.timeLeft - 1
+  let timeLeft = state.timeLeft - dt
   let round = state.round
   let allyScore = state.allyScore
   let enemyScore = state.enemyScore
   let players = state.players.map((p) =>
-    moveToward(retarget(map, p, state.winChance, buffs), teamSpeed),
+    moveToward(retarget(map, p, state.winChance, buffs, dt), teamSpeed, dt),
   )
   const events = [...state.events]
   let orderMarker = state.orderMarker
 
-  // Clear marker when selected unit arrives
   if (orderMarker && state.selectedUnitId) {
     const u = players.find((p) => p.id === state.selectedUnitId)
-    if (u && Math.hypot(u.x - orderMarker.x, u.y - orderMarker.y) < 4) {
+    if (u && Math.hypot(u.x - orderMarker.x, u.y - orderMarker.y) < 3.5) {
       orderMarker = null
     }
   }
 
-  const fightChance = 0.2 + buffs.utility * 0.05
+  // Scale fight attempts to real time (~0.35/sec base)
+  const fightChance = (0.32 + buffs.utility * 0.06) * dt
   const fightRange = 16 + buffs.utility * 3.5
 
   if (Math.random() < fightChance) {
@@ -409,7 +420,6 @@ export function tickMatch(state: MatchState, upgrades: Upgrade[] = []): MatchSta
         const late =
           timeLeft < 18 || aliveAllies.length + aliveEnemies.length <= 3
         const clutchBias = late ? buffs.clutch * 3.5 : buffs.clutch * 0.5
-        // Unit combat stats matter — upgraded units win more fights
         const combatDelta = (a.combat - e.combat) * 0.45
         const teamBias = (buffs.power - 1) * 3.5
         const chance = Math.max(
@@ -518,7 +528,7 @@ export function tickMatch(state: MatchState, upgrades: Upgrade[] = []): MatchSta
     (alliesAlive - enemiesAlive) * 3 + (allyScore - enemyScore) * 2
   const winChance = Math.max(
     8,
-    Math.min(92, state.winChance + aliveFactor * 0.05),
+    Math.min(92, state.winChance + aliveFactor * 0.05 * dt),
   )
 
   return {
@@ -535,8 +545,9 @@ export function tickMatch(state: MatchState, upgrades: Upgrade[] = []): MatchSta
 }
 
 export function formatClock(seconds: number): string {
-  const m = Math.floor(seconds / 60)
-  const s = seconds % 60
+  const total = Math.max(0, Math.ceil(seconds))
+  const m = Math.floor(total / 60)
+  const s = total % 60
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
@@ -563,7 +574,7 @@ export function idlePreviewPlayers(map: GameMap): MatchPlayer[] {
       targetX: z.x,
       targetY: z.y,
       waypoints: [],
-      orderedTicks: 0,
+      orderedTime: 0,
     }
   }
   return [
