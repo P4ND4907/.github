@@ -1,3 +1,4 @@
+import { BrainPanel } from '../components/BrainPanel'
 import { LeagueTable } from '../components/LeagueTable'
 import { MatchPanel } from '../components/MatchPanel'
 import { UpgradePanel } from '../components/UpgradePanel'
@@ -7,6 +8,7 @@ export function HomeScreen() {
     <div className="screen stack">
       <LeagueTable />
       <MatchPanel />
+      <BrainPanel />
       <UpgradePanel />
     </div>
   )

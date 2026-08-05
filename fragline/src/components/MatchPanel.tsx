@@ -5,6 +5,7 @@ import {
   formatClock,
   idlePreviewPlayers,
 } from '../lib/matchSim'
+import { buffsWithBrain } from '../lib/learning'
 import {
   formatCash,
   skillUpgradeCost,
@@ -22,6 +23,7 @@ export function MatchPanel() {
   const teamPower = useGameStore((s) => s.teamPower)
   const standings = useGameStore((s) => s.standings)
   const upgrades = useGameStore((s) => s.upgrades)
+  const brain = useGameStore((s) => s.brain)
   const squad = useGameStore((s) => s.squad)
   const cash = useGameStore((s) => s.cash)
   const playMatch = useGameStore((s) => s.playMatch)
@@ -44,7 +46,7 @@ export function MatchPanel() {
   const done = match.phase === 'result'
   const map = getMap(match.mapId)
   const previewPlayers = idlePreviewPlayers(map)
-  const buffs = buffsFromUpgrades(upgrades)
+  const buffs = buffsWithBrain(buffsFromUpgrades(upgrades), brain)
 
   const selected =
     match.players.find((p) => p.id === match.selectedUnitId) ??
@@ -128,8 +130,9 @@ export function MatchPanel() {
           <TacticalMap players={previewPlayers} mapId={match.mapId} />
           <div className="idle-overlay">
             <p>
-              Next map: <strong>{match.mapName}</strong>. Battle-sim: select a
-              unit, tap the map to move, upgrade fighters mid-fight.
+              Next map: <strong>{match.mapName}</strong>. Squad IQ{' '}
+              <strong>{brain.iq}</strong> is studying holds & flanks while idle —
+              play a match to teach them live.
             </p>
           </div>
         </div>

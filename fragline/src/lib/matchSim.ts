@@ -19,7 +19,16 @@ import {
   tickGadgets,
   trySpotClaymores,
 } from './gadgets'
-import type { CombatFx, MatchPlayer, MatchState, Player, Team, Upgrade } from '../types'
+import { buffsWithBrain, mapFamiliarity } from './learning'
+import type {
+  CombatFx,
+  MatchPlayer,
+  MatchState,
+  Player,
+  TacticalBrain,
+  Team,
+  Upgrade,
+} from '../types'
 
 export interface MatchBuffs {
   power: number
@@ -125,6 +134,9 @@ export function createIdleMatch(excludeMapId?: string | null): MatchState {
     gadgets: [],
     pendingCash: 0,
     fragStreak: 0,
+    peakStreak: 0,
+    pendingXp: 0,
+    pendingLessons: [],
   }
 }
 
@@ -134,14 +146,19 @@ export function startMatch(
   teamPower: number,
   previousMapId?: string | null,
   upgrades: Upgrade[] = [],
+  brain?: TacticalBrain,
 ): MatchState {
   const map = pickRandomMap(previousMapId)
-  const buffs = buffsFromUpgrades(upgrades)
-  // Clear, strong upgrade impact on opening win%
+  const buffs = brain
+    ? buffsWithBrain(buffsFromUpgrades(upgrades), brain)
+    : buffsFromUpgrades(upgrades)
+  const fam = brain ? mapFamiliarity(brain, map.id) : 0
+  // Clear, strong upgrade + IQ impact on opening win%
   const powerBias =
     (buffs.power - 1) * 4.5 +
     (buffs.strategy - 1) * 3 +
-    (buffs.intelligence - 1) * 1.5
+    (buffs.intelligence - 1) * 1.5 +
+    (brain ? (brain.iq - 1) * 0.8 + fam * 0.06 : 0)
   const winChance = Math.max(
     10,
     Math.min(
@@ -183,6 +200,10 @@ export function startMatch(
     ),
   )
 
+  const iqLine = brain
+    ? `Squad IQ ${brain.iq} · map read ${Math.round(fam)}%`
+    : 'Squad IQ warming up'
+
   return {
     phase: 'live',
     round: 1,
@@ -197,6 +218,7 @@ export function startMatch(
     events: [
       `MAP → ${map.name}`,
       `vs ${opponent.name}`,
+      iqLine,
       describeBuffs(buffs),
       'Tap a blue unit, then tap the map to move',
     ],
@@ -208,6 +230,9 @@ export function startMatch(
     gadgets: [],
     pendingCash: 0,
     fragStreak: 0,
+    peakStreak: 0,
+    pendingXp: 0,
+    pendingLessons: [],
   }
 }
 
@@ -313,14 +338,18 @@ function pickDestination(
   buffs: MatchBuffs,
   foes?: MatchPlayer[],
   allies?: MatchPlayer[],
+  mapFam = 0,
 ): GridPoint {
-  // Hold angles when defending — strategy upgrades bias toward cover peeks
+  // Learned map memory → prefer known hold/flank routes
+  const memoryBias = mapFam / 100
+
+  // Hold angles when defending — strategy + learned holds
   const wantHold =
     p.team === 'ally'
-      ? winChance < 48 + buffs.strategy
+      ? winChance < 48 + buffs.strategy + memoryBias * 8
       : winChance > 52 - buffs.strategy
 
-  if (wantHold && Math.random() < 0.14 + buffs.strategy * 0.03) {
+  if (wantHold && Math.random() < 0.14 + buffs.strategy * 0.03 + memoryBias * 0.12) {
     const pool = p.team === 'ally' ? map.allyHold : map.enemyHold
     const candidates = pool
       .map((id) => zoneById(map, id))
@@ -331,8 +360,8 @@ function pickDestination(
     }
   }
 
-  // Flank instead of stacking the same lane as a teammate
-  if (allies?.length && Math.random() < 0.4 + buffs.intelligence * 0.05) {
+  // Flank instead of stacking — intelligence + map memory
+  if (allies?.length && Math.random() < 0.4 + buffs.intelligence * 0.05 + memoryBias * 0.15) {
     const crowded = allies.filter(
       (a) => a.id !== p.id && a.alive && Math.hypot(a.x - p.x, a.y - p.y) < 16,
     )
@@ -362,7 +391,7 @@ function pickDestination(
       .map((f) => ({ f, d: Math.hypot(f.x - p.x, f.y - p.y) }))
       .filter(({ f, d }) => d < 36 && hasLineOfSight(map, p.x, p.y, f.x, f.y))
       .sort((a, b) => a.d - b.d)
-    if (visible.length && Math.random() < 0.45 + buffs.strategy * 0.04) {
+    if (visible.length && Math.random() < 0.45 + buffs.strategy * 0.04 + memoryBias * 0.08) {
       const prey = visible[0].f
       const cell = worldToCell(prey.x, prey.y)
       return randomOpenCell(map, cell, 3)
@@ -371,11 +400,11 @@ function pickDestination(
 
   const aggressive =
     p.team === 'ally'
-      ? winChance > 40 + buffs.strategy * 2
+      ? winChance > 40 + buffs.strategy * 2 - memoryBias * 4
       : winChance < 60 - buffs.strategy * 2
 
   const useObjective =
-    Math.random() < 0.3 + buffs.intelligence * 0.08 + buffs.strategy * 0.05
+    Math.random() < 0.3 + buffs.intelligence * 0.08 + buffs.strategy * 0.05 + memoryBias * 0.1
 
   if (useObjective) {
     const pool =
@@ -396,7 +425,7 @@ function pickDestination(
   }
 
   const here = worldToCell(p.x, p.y)
-  const roamRadius = 3 + Math.min(6, Math.floor(buffs.intelligence / 2))
+  const roamRadius = 3 + Math.min(6, Math.floor(buffs.intelligence / 2 + memoryBias * 2))
   for (let attempt = 0; attempt < 6; attempt++) {
     const cell = randomOpenCell(map, here, roamRadius)
     if (!allyTargets.has(`${cell.col},${cell.row}`)) return cell
@@ -412,6 +441,7 @@ function retarget(
   dt: number,
   foes?: MatchPlayer[],
   allies?: MatchPlayer[],
+  mapFam = 0,
 ): MatchPlayer {
   if (!p.alive) return p
 
@@ -431,7 +461,7 @@ function retarget(
   const dist = Math.hypot(p.targetX - p.x, p.targetY - p.y)
   if (dist > 1.2 && p.stuckTime < 0.35) return p
 
-  const repathRate = (0.65 - buffs.intelligence * 0.03) * dt
+  const repathRate = (0.65 - buffs.intelligence * 0.03 + mapFam * 0.001) * dt
   const huntBoost =
     foes?.some(
       (f) =>
@@ -446,7 +476,7 @@ function retarget(
   return assignRoamPath(
     map,
     p,
-    pickDestination(map, p, winChance, buffs, foes, allies),
+    pickDestination(map, p, winChance, buffs, foes, allies, mapFam),
   )
 }
 
@@ -562,10 +592,14 @@ export function tickMatch(
   state: MatchState,
   upgrades: Upgrade[] = [],
   dt = 1 / 20,
+  brain?: TacticalBrain,
 ): MatchState {
   if (state.phase !== 'live') return state
   const map = getMap(state.mapId)
-  const buffs = buffsFromUpgrades(upgrades)
+  const buffs = brain
+    ? buffsWithBrain(buffsFromUpgrades(upgrades), brain)
+    : buffsFromUpgrades(upgrades)
+  const mapFam = brain ? mapFamiliarity(brain, state.mapId) : 0
   // Smooth glide speed in map-units / second
   const teamSpeed = 11 + buffs.reflex * 1.8
 
@@ -581,7 +615,7 @@ export function tickMatch(
       (o) => o.team === p.team && o.alive && o.id !== p.id,
     )
     const moved = moveToward(
-      retarget(map, p, state.winChance, buffs, dt, foes, allies),
+      retarget(map, p, state.winChance, buffs, dt, foes, allies, mapFam),
       teamSpeed,
       dt,
     )
@@ -616,7 +650,10 @@ export function tickMatch(
     .map((f) => ({ ...f, life: f.life - dt }))
     .filter((f) => f.life > 0)
   let pendingCash = 0
+  let pendingXp = 0
+  const pendingLessons: string[] = []
   let fragStreak = state.fragStreak
+  let peakStreak = state.peakStreak ?? 0
 
   if (orderMarker && state.selectedUnitId) {
     const u = players.find((p) => p.id === state.selectedUnitId)
@@ -641,7 +678,10 @@ export function tickMatch(
       const g = placeClaymore(map, p, gadgets)
       if (g) {
         gadgets = [...gadgets, g]
-        if (p.team === 'ally') events.push(`${p.name} planted claymore`)
+        if (p.team === 'ally') {
+          events.push(`${p.name} planted claymore`)
+          pendingXp += 2.2
+        }
       }
     }
 
@@ -660,6 +700,7 @@ export function tickMatch(
           gadgets = [...gadgets, thrown.gadget]
           fx.push(thrown.fx)
           events.push(`${p.name} cooked frag`)
+          if (p.team === 'ally') pendingXp += 1.8
         }
       }
     }
@@ -676,6 +717,10 @@ export function tickMatch(
     )
     gadgets = spotted.gadgets
     events.push(...spotted.events)
+    if (spotted.events.length) {
+      pendingXp += spotted.events.length * 3.2
+      if (Math.random() < 0.4) pendingLessons.push('Studying trap timings…')
+    }
 
     // Enemies have weaker base intel to spot ours
     const enemySpot = trySpotClaymores(
@@ -704,8 +749,10 @@ export function tickMatch(
     events.push(...result.events)
     if (result.pendingCash > 0) {
       fragStreak += 1
+      peakStreak = Math.max(peakStreak, fragStreak)
       const payout = result.pendingCash + fragStreak * 350
       pendingCash += payout
+      pendingXp += 4
       events.push(`+$${Math.round(payout / 100) / 10}K gadget`)
     }
     if (result.events.some((e) => e.includes('Walked into claymore'))) {
@@ -792,9 +839,11 @@ export function tickMatch(
             events.push(`${shooter.name} fragged ${target.name}`)
             if (shooter.team === 'ally') {
               fragStreak += 1
+              peakStreak = Math.max(peakStreak, fragStreak)
               const streakBonus = fragStreak >= 3 ? 900 * fragStreak : 0
               const payout = 1200 + dmg * 18 + streakBonus
               pendingCash += payout
+              pendingXp += 2.5 + fragStreak * 0.6
               events.push(
                 fragStreak >= 2
                   ? `+$${Math.round(payout / 100) / 10}K · ${fragStreak}x streak`
@@ -832,9 +881,13 @@ export function tickMatch(
     if (allyWonRound) {
       allyScore += 1
       events.push(`Round ${round} won`)
+      pendingXp += 8
+      if (Math.random() < 0.45) pendingLessons.push('Round win locked into playbook')
     } else {
       enemyScore += 1
       events.push(`Round ${round} lost`)
+      pendingXp += 4
+      if (Math.random() < 0.5) pendingLessons.push('Adjusting holds after round loss')
     }
 
     round += 1
@@ -852,13 +905,16 @@ export function tickMatch(
         enemyScore,
         timeLeft: 0,
         players,
-        events: events.slice(-8),
+        events: events.slice(-10),
         result,
         orderMarker: null,
         fx: [],
         gadgets: [],
         pendingCash: 0,
         fragStreak: 0,
+        peakStreak,
+        pendingXp,
+        pendingLessons,
       }
     }
 
@@ -926,6 +982,9 @@ export function tickMatch(
     gadgets,
     pendingCash,
     fragStreak,
+    peakStreak,
+    pendingXp,
+    pendingLessons,
   }
 }
 

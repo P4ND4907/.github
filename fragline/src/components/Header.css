@@ -97,9 +97,17 @@
 }
 
 .res.gem,
-.res.power {
+.res.power,
+.res.iq {
   display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
+}
+
+.res.iq .res-label {
+  color: #7ec8ff;
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }

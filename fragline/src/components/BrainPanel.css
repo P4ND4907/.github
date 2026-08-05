@@ -1,0 +1,167 @@
+.brain-panel .panel-title {
+  margin-bottom: 0;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  letter-spacing: 0.08em;
+}
+
+.study-toggle {
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+}
+
+.study-toggle.on {
+  color: #04140c;
+  background: linear-gradient(180deg, #3be88b, #1fb865);
+  border-color: transparent;
+  animation: pulseGlow 2.4s ease-in-out infinite;
+}
+
+.brain-hero {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.iq-block {
+  width: 72px;
+  height: 72px;
+  border-radius: 16px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background:
+    radial-gradient(circle at 30% 25%, rgba(58, 160, 255, 0.35), transparent 55%),
+    linear-gradient(160deg, #1c2736, #121820);
+  border: 1px solid rgba(58, 160, 255, 0.35);
+  box-shadow: inset 0 0 18px rgba(58, 160, 255, 0.12);
+}
+
+.iq-label {
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: #8eb6de;
+  text-transform: uppercase;
+}
+
+.iq-value {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: #e8f3ff;
+}
+
+.xp-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.xp-nums {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: #b7c8de;
+}
+
+.xp-bar {
+  height: 8px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.xp-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #3aa0ff, #6ec8ff 55%, #2fd67b);
+  border-radius: inherit;
+  transition: width 220ms ease;
+}
+
+.study-rate {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
+.playbook-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.playbook-pill {
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+  font-size: 0.72rem;
+}
+
+.playbook-pill strong {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: #d7e6ff;
+}
+
+.playbook-bar {
+  margin-top: 6px;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.playbook-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(58, 160, 255, 0.85), rgba(255, 200, 87, 0.85));
+  border-radius: inherit;
+}
+
+.playbook-summary {
+  margin: 10px 0 0;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+}
+
+.lesson-feed {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lesson-feed li {
+  font-size: 0.72rem;
+  color: #b7c0d0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(58, 160, 255, 0.06);
+  border: 1px solid rgba(58, 160, 255, 0.12);
+  font-family: var(--font-body);
+}
+
+.lesson-feed li:first-child {
+  color: #e8edf4;
+  border-color: rgba(47, 214, 123, 0.35);
+  background: rgba(47, 214, 123, 0.08);
+}

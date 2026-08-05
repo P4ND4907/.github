@@ -6,6 +6,7 @@ export function Header() {
   const gems = useGameStore((s) => s.gems)
   const incomePerSec = useGameStore((s) => s.incomePerSec)
   const teamPower = useGameStore((s) => s.teamPower)
+  const iq = useGameStore((s) => s.brain?.iq ?? 1)
 
   return (
     <header className="topbar">
@@ -13,7 +14,7 @@ export function Header() {
         <span className="brand-mark" aria-hidden />
         <div>
           <strong>FRAGLINE</strong>
-          <small>Idle Esports Manager</small>
+          <small>Strategy Idle Esports</small>
         </div>
       </div>
       <div className="resources">
@@ -25,6 +26,10 @@ export function Header() {
         <div className="res gem" title="Gems">
           <span className="res-label">◆</span>
           <strong>{gems}</strong>
+        </div>
+        <div className="res iq" title="Tactical IQ">
+          <span className="res-label">IQ</span>
+          <strong>{iq}</strong>
         </div>
         <div className="res power" title="Team power">
           <span className="res-label power-mark" aria-hidden>

@@ -149,6 +149,12 @@ export interface MatchState {
   pendingCash: number
   /** Ally frag streak this round for dopamine copy */
   fragStreak: number
+  /** Peak frag streak this match — used for learning XP */
+  peakStreak: number
+  /** XP earned this tick from smart plays — store drains into brain */
+  pendingXp: number
+  /** Live lesson strings emitted this tick */
+  pendingLessons: string[]
 }
 
 export interface GameState {
@@ -167,4 +173,28 @@ export interface GameState {
   match: MatchState
   lastTick: number
   totalWins: number
+  /** Strategy-idle brain — learns from matches & studies while idle */
+  brain: TacticalBrain
+}
+
+export interface Playbook {
+  holds: number
+  flanks: number
+  utility: number
+  aggression: number
+  clutch: number
+}
+
+export interface TacticalBrain {
+  iq: number
+  xp: number
+  xpToNext: number
+  playbook: Playbook
+  /** Familiarity 0–100 per map id */
+  mapMemory: Record<string, number>
+  lessons: string[]
+  /** XP gained per second while idle studying */
+  studyRate: number
+  matchesLearned: number
+  idleStudying: boolean
 }
