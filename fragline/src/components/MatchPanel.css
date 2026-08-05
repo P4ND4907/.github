@@ -98,6 +98,18 @@
   margin-left: auto;
 }
 
+.streak-banner {
+  text-align: center;
+  font-family: 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.1em;
+  font-size: 0.85rem;
+  padding: 7px 10px;
+  border-radius: 10px;
+  color: #04140c;
+  background: linear-gradient(90deg, #ffc857, #ff9a4a);
+  animation: pulseGlow 1.4s ease-in-out infinite;
+}
+
 .battle-dock {
   display: flex;
   flex-direction: column;

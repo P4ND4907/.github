@@ -126,6 +126,10 @@ export interface MatchState {
   /** World marker for last issued move order */
   orderMarker: { x: number; y: number } | null
   fx: CombatFx[]
+  /** Cash granted this tick from frags — store drains it */
+  pendingCash: number
+  /** Ally frag streak this round for dopamine copy */
+  fragStreak: number
 }
 
 export interface GameState {

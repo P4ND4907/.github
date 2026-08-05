@@ -1,6 +1,7 @@
 import {
   findGridPath,
   getMap,
+  hasLineOfSight,
   isOpenCell,
   pathToWorld,
   pickRandomMap,
@@ -112,6 +113,8 @@ export function createIdleMatch(excludeMapId?: string | null): MatchState {
     selectedUnitId: null,
     orderMarker: null,
     fx: [],
+    pendingCash: 0,
+    fragStreak: 0,
   }
 }
 
@@ -192,6 +195,8 @@ export function startMatch(
     selectedUnitId: allies[0]?.id ?? null,
     orderMarker: null,
     fx: [],
+    pendingCash: 0,
+    fragStreak: 0,
   }
 }
 
@@ -295,7 +300,24 @@ function pickDestination(
   p: MatchPlayer,
   winChance: number,
   buffs: MatchBuffs,
+  foes?: MatchPlayer[],
 ): GridPoint {
+  // Hunt visible enemies — creates corridor peek engagements
+  if (foes?.length) {
+    const visible = foes
+      .filter((f) => f.alive)
+      .map((f) => ({ f, d: Math.hypot(f.x - p.x, f.y - p.y) }))
+      .filter(({ f, d }) => d < 28 && hasLineOfSight(map, p.x, p.y, f.x, f.y))
+      .sort((a, b) => a.d - b.d)
+    if (visible.length && Math.random() < 0.55 + buffs.strategy * 0.04) {
+      const prey = visible[0].f
+      const cell = worldToCell(prey.x, prey.y)
+      // Approach adjacent open cell instead of stacking on top
+      const near = randomOpenCell(map, cell, 2)
+      return near
+    }
+  }
+
   const aggressive =
     p.team === 'ally'
       ? winChance > 40 + buffs.strategy * 2
@@ -328,6 +350,7 @@ function retarget(
   winChance: number,
   buffs: MatchBuffs,
   dt: number,
+  foes?: MatchPlayer[],
 ): MatchPlayer {
   if (!p.alive) return p
 
@@ -335,17 +358,25 @@ function retarget(
     return { ...p, orderedTime: Math.max(0, p.orderedTime - dt) }
   }
 
-  // Stay on current path — only rarely repath (smooth travel)
   if (p.waypoints.length > 0) return p
 
   const dist = Math.hypot(p.targetX - p.x, p.targetY - p.y)
   if (dist > 1.2) return p
 
-  // ~repath every 1.2–2.4s depending on intelligence
   const repathRate = (0.55 - buffs.intelligence * 0.04) * dt
-  if (Math.random() > Math.max(0.08, repathRate)) return p
+  // Chase harder when an enemy is visible
+  const huntBoost =
+    foes?.some(
+      (f) =>
+        f.alive &&
+        Math.hypot(f.x - p.x, f.y - p.y) < 22 &&
+        hasLineOfSight(map, p.x, p.y, f.x, f.y),
+    )
+      ? 0.35
+      : 0
+  if (Math.random() > Math.max(0.08, repathRate + huntBoost * dt)) return p
 
-  return assignRoamPath(map, p, pickDestination(map, p, winChance, buffs))
+  return assignRoamPath(map, p, pickDestination(map, p, winChance, buffs, foes))
 }
 
 function advanceWaypoints(p: MatchPlayer): MatchPlayer {
@@ -394,8 +425,11 @@ export function tickMatch(
   let allyScore = state.allyScore
   let enemyScore = state.enemyScore
   let players = state.players.map((p) => {
+    const foes = state.players.filter(
+      (o) => o.team !== p.team && o.alive,
+    )
     const moved = moveToward(
-      retarget(map, p, state.winChance, buffs, dt),
+      retarget(map, p, state.winChance, buffs, dt, foes),
       teamSpeed,
       dt,
     )
@@ -409,6 +443,8 @@ export function tickMatch(
   let fx: CombatFx[] = state.fx
     .map((f) => ({ ...f, life: f.life - dt }))
     .filter((f) => f.life > 0)
+  let pendingCash = 0
+  let fragStreak = state.fragStreak
 
   if (orderMarker && state.selectedUnitId) {
     const u = players.find((p) => p.id === state.selectedUnitId)
@@ -417,28 +453,29 @@ export function tickMatch(
     }
   }
 
-  // More frequent skirmishes so shooting VFX show up often
-  const fightChance = (0.55 + buffs.utility * 0.08) * dt
+  // Skirmish only with clear line of sight (no wall-banging)
+  const fightChance = (0.7 + buffs.utility * 0.1) * dt
   const fightRange = 18 + buffs.utility * 3.5
 
   if (Math.random() < fightChance) {
     const aliveAllies = players.filter((p) => p.alive && p.team === 'ally')
     const aliveEnemies = players.filter((p) => p.alive && p.team === 'enemy')
     if (aliveAllies.length && aliveEnemies.length) {
-      let a = aliveAllies[0]
-      let e = aliveEnemies[0]
-      let best = Infinity
+      // Prefer closest pair that can actually see each other
+      type Pair = { a: (typeof aliveAllies)[0]; e: (typeof aliveEnemies)[0]; d: number }
+      const visible: Pair[] = []
       for (const ally of aliveAllies) {
         for (const enemy of aliveEnemies) {
           const d = Math.hypot(ally.x - enemy.x, ally.y - enemy.y)
-          if (d < best) {
-            best = d
-            a = ally
-            e = enemy
-          }
+          if (d > fightRange) continue
+          if (!hasLineOfSight(map, ally.x, ally.y, enemy.x, enemy.y)) continue
+          visible.push({ a: ally, e: enemy, d })
         }
       }
-      if (best < fightRange) {
+      visible.sort((x, y) => x.d - y.d)
+
+      if (visible.length) {
+        const { a, e } = visible[0]
         const late =
           timeLeft < 18 || aliveAllies.length + aliveEnemies.length <= 3
         const clutchBias = late ? buffs.clutch * 3.5 : buffs.clutch * 0.5
@@ -456,45 +493,62 @@ export function tickMatch(
         const shooter = allyWins ? a : e
         const target = allyWins ? e : a
 
-        const shotId = `fx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-        fx.push({
-          id: `${shotId}_shot`,
-          kind: 'shot',
-          fromX: shooter.x,
-          fromY: shooter.y,
-          toX: target.x,
-          toY: target.y,
-          team: shooter.team,
-          life: 0.28,
-          maxLife: 0.28,
-        })
-        fx.push({
-          id: `${shotId}_hit`,
-          kind: allyWins && target.hp - dmg <= 0 ? 'kill' : 'hit',
-          fromX: shooter.x,
-          fromY: shooter.y,
-          toX: target.x,
-          toY: target.y,
-          team: shooter.team,
-          life: allyWins && target.hp - dmg <= 0 ? 0.55 : 0.35,
-          maxLife: allyWins && target.hp - dmg <= 0 ? 0.55 : 0.35,
-        })
+        // Double-check LOS at fire time (positions may have drifted)
+        if (hasLineOfSight(map, shooter.x, shooter.y, target.x, target.y)) {
+          const shotId = `fx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+          const willKill = target.hp - dmg <= 0
+          fx.push({
+            id: `${shotId}_shot`,
+            kind: 'shot',
+            fromX: shooter.x,
+            fromY: shooter.y,
+            toX: target.x,
+            toY: target.y,
+            team: shooter.team,
+            life: 0.28,
+            maxLife: 0.28,
+          })
+          fx.push({
+            id: `${shotId}_hit`,
+            kind: willKill ? 'kill' : 'hit',
+            fromX: shooter.x,
+            fromY: shooter.y,
+            toX: target.x,
+            toY: target.y,
+            team: shooter.team,
+            life: willKill ? 0.55 : 0.35,
+            maxLife: willKill ? 0.55 : 0.35,
+          })
 
-        players = players.map((p) =>
-          p.id === shooter.id ? { ...p, firingTime: 0.22 } : p,
-        )
+          players = players.map((p) =>
+            p.id === shooter.id ? { ...p, firingTime: 0.22 } : p,
+          )
 
-        const newHp = target.hp - dmg
-        if (newHp <= 0) {
-          players = players.map((p) =>
-            p.id === target.id ? { ...p, alive: false, hp: 0 } : p,
-          )
-          events.push(`${shooter.name} fragged ${target.name}`)
-        } else {
-          players = players.map((p) =>
-            p.id === target.id ? { ...p, hp: newHp } : p,
-          )
-          events.push(`${shooter.name} hit ${target.name} (−${dmg})`)
+          const newHp = target.hp - dmg
+          if (newHp <= 0) {
+            players = players.map((p) =>
+              p.id === target.id ? { ...p, alive: false, hp: 0 } : p,
+            )
+            events.push(`${shooter.name} fragged ${target.name}`)
+            if (shooter.team === 'ally') {
+              fragStreak += 1
+              const streakBonus = fragStreak >= 3 ? 900 * fragStreak : 0
+              const payout = 1200 + dmg * 18 + streakBonus
+              pendingCash += payout
+              events.push(
+                fragStreak >= 2
+                  ? `+$${Math.round(payout / 100) / 10}K · ${fragStreak}x streak`
+                  : `+$${Math.round(payout / 100) / 10}K frag`,
+              )
+            } else {
+              fragStreak = 0
+            }
+          } else {
+            players = players.map((p) =>
+              p.id === target.id ? { ...p, hp: newHp } : p,
+            )
+            events.push(`${shooter.name} hit ${target.name} (−${dmg})`)
+          }
         }
       }
     }
@@ -542,12 +596,15 @@ export function tickMatch(
         result,
         orderMarker: null,
         fx: [],
+        pendingCash: 0,
+        fragStreak: 0,
       }
     }
 
     timeLeft = 55
     orderMarker = null
     fx = []
+    fragStreak = 0
     players = players.map((p, _i, all) => {
       const spawns = p.team === 'ally' ? map.allySpawns : map.enemySpawns
       const idx = all.filter((x) => x.team === p.team).findIndex((x) => x.id === p.id)
@@ -585,6 +642,8 @@ export function tickMatch(
     events: events.slice(-8),
     orderMarker,
     fx,
+    pendingCash,
+    fragStreak,
   }
 }
 

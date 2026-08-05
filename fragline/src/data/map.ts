@@ -525,4 +525,38 @@ export function pathToWorld(path: GridPoint[]): { x: number; y: number }[] {
   })
 }
 
+/**
+ * Grid LOS — ray must only travel through open cells.
+ * Samples along the segment so diagonal cuts through wall corners are blocked.
+ */
+export function hasLineOfSight(
+  map: GameMap,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+): boolean {
+  const dx = x1 - x0
+  const dy = y1 - y0
+  const dist = Math.hypot(dx, dy)
+  if (dist < 0.5) return true
+
+  const steps = Math.max(6, Math.ceil(dist / 2.2))
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps
+    const x = x0 + dx * t
+    const y = y0 + dy * t
+    const cell = worldToCell(x, y)
+    if (!isOpenCell(map, cell.col, cell.row)) return false
+
+    // Also reject if the sample sits inside a wall block footprint
+    for (const b of map.blocks) {
+      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+        return false
+      }
+    }
+  }
+  return true
+}
+
 export { PAWN_R, CELL, cellCenter }

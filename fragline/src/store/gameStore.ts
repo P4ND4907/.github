@@ -177,7 +177,11 @@ export const useGameStore = create<GameStore>()(
           : 1 / 30
         lastMatchTickAt = now
         const next = tickMatch(match, upgrades, dt)
-        set({ match: next })
+        const payout = next.pendingCash || 0
+        set({
+          match: { ...next, pendingCash: 0 },
+          cash: payout > 0 ? get().cash + payout : get().cash,
+        })
 
         if (next.phase === 'result' && next.result && next.opponentId) {
           lastMatchTickAt = 0
@@ -191,17 +195,32 @@ export const useGameStore = create<GameStore>()(
           )
           const reward =
             next.result === 'win'
-              ? 18000 + get().teamPower * 8
+              ? 22000 + get().teamPower * 10
               : next.result === 'draw'
-                ? 7000
-                : 2500
+                ? 9000
+                : 3500
+          // Near-miss bonus keeps players hooked after close losses
+          const nearMiss =
+            next.result === 'loss' &&
+            Math.abs(next.allyScore - next.enemyScore) <= 2
+              ? 4000
+              : 0
           set((s) => ({
             standings,
             matchesPlayed: s.matchesPlayed + 1,
-            cash: s.cash + reward,
+            cash: s.cash + reward + nearMiss,
             totalWins: s.totalWins + (next.result === 'win' ? 1 : 0),
             incomePerSec:
-              calcIncome(s.teamPower, s.leagueIndex) + (next.result === 'win' ? 5 : 0),
+              calcIncome(s.teamPower, s.leagueIndex) +
+              (next.result === 'win' ? 8 : next.result === 'draw' ? 2 : 0),
+            match: {
+              ...next,
+              pendingCash: 0,
+              events:
+                nearMiss > 0
+                  ? [...next.events, 'Close one — +$4K bounce-back']
+                  : next.events,
+            },
           }))
         }
       },

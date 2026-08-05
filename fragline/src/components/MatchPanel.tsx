@@ -121,6 +121,12 @@ export function MatchPanel() {
         />
       )}
 
+      {live && match.fragStreak >= 2 && (
+        <div className="streak-banner">
+          {match.fragStreak}x FRAG STREAK — keep the pressure on
+        </div>
+      )}
+
       {live && (
         <div className="battle-dock">
           <div className="unit-rail">
