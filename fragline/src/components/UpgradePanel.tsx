@@ -9,9 +9,13 @@ export function UpgradePanel() {
   return (
     <section className="panel upgrade-panel">
       <div className="row space">
-        <h2 className="panel-title">Power Upgrades</h2>
-        <span className="pill">⚡ Team boosts</span>
+        <h2 className="panel-title">Team Upgrades</h2>
+        <span className="pill">Improve match play</span>
       </div>
+      <p className="upgrade-lead muted">
+        Power, Intelligence, Strategy and more — each level changes how your squad
+        free-roams, fights, and closes rounds.
+      </p>
       <div className="upgrade-rail">
         {upgrades.map((u) => {
           const cost = upgradeCost(u)
@@ -19,13 +23,14 @@ export function UpgradePanel() {
           return (
             <article key={u.id} className="upgrade-card">
               <div className="upgrade-icon" aria-hidden>
-                ⚡
+                {u.icon}
               </div>
               <div className="upgrade-body">
                 <strong>{u.name}</strong>
-                <span>
-                  Lv. {u.level} · +{u.powerPerLevel} power
+                <span className="upgrade-level">
+                  Lv. {u.level} · +{u.powerPerLevel} team power
                 </span>
+                <span className="upgrade-blurb">{u.blurb}</span>
               </div>
               <button
                 className="btn btn-warn upgrade-btn"

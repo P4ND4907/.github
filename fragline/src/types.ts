@@ -51,10 +51,23 @@ export interface League {
 export interface Upgrade {
   id: string
   name: string
+  blurb: string
+  icon: string
   level: number
+  /** Contribution to displayed team power */
   powerPerLevel: number
   baseCost: number
+  /** Which match stat this upgrades */
+  stat: UpgradeStat
 }
+
+export type UpgradeStat =
+  | 'power'
+  | 'intelligence'
+  | 'strategy'
+  | 'reflex'
+  | 'utility'
+  | 'clutch'
 
 export type Screen = 'home' | 'squad' | 'market' | 'career'
 
@@ -69,6 +82,8 @@ export interface MatchPlayer {
   alive: boolean
   targetX: number
   targetY: number
+  /** World waypoints along free-roam grid path (around walls) */
+  waypoints: { x: number; y: number }[]
 }
 
 export interface MatchState {
@@ -79,6 +94,7 @@ export interface MatchState {
   enemyScore: number
   timeLeft: number
   winChance: number
+  mapId: string
   mapName: string
   players: MatchPlayer[]
   events: string[]

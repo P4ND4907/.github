@@ -17,9 +17,66 @@ import type { GameState, Player, Screen, SkillKey, Upgrade } from '../types'
 export { formatCash, playerPower, marketPrice, skillUpgradeCost }
 
 const DEFAULT_UPGRADES: Upgrade[] = [
-  { id: 'firepower', name: 'Firepower', level: 1, powerPerLevel: 1, baseCost: 4200 },
-  { id: 'utility', name: 'Utility Pack', level: 1, powerPerLevel: 1, baseCost: 5100 },
-  { id: 'comms', name: 'Comms Link', level: 1, powerPerLevel: 2, baseCost: 7800 },
+  {
+    id: 'power',
+    name: 'Power',
+    blurb: 'Raw aim & damage — raises win chance in gunfights',
+    icon: '⚡',
+    level: 1,
+    powerPerLevel: 2,
+    baseCost: 4200,
+    stat: 'power',
+  },
+  {
+    id: 'intelligence',
+    name: 'Intelligence',
+    blurb: 'Smarter routes — free-roam paths stick to the plan',
+    icon: '◎',
+    level: 1,
+    powerPerLevel: 1,
+    baseCost: 4800,
+    stat: 'intelligence',
+  },
+  {
+    id: 'strategy',
+    name: 'Strategy',
+    blurb: 'Better site calls — push/hold timing & round IQ',
+    icon: '▣',
+    level: 1,
+    powerPerLevel: 2,
+    baseCost: 5600,
+    stat: 'strategy',
+  },
+  {
+    id: 'reflex',
+    name: 'Reflex',
+    blurb: 'Faster movement across the map',
+    icon: '›',
+    level: 1,
+    powerPerLevel: 1,
+    baseCost: 3900,
+    stat: 'reflex',
+  },
+  {
+    id: 'utility',
+    name: 'Utility',
+    blurb: 'Longer fight range & more skirmishes',
+    icon: '◌',
+    level: 1,
+    powerPerLevel: 1,
+    baseCost: 5100,
+    stat: 'utility',
+  },
+  {
+    id: 'clutch',
+    name: 'Clutch',
+    blurb: 'Late-round and low-man advantage',
+    icon: '▲',
+    level: 1,
+    powerPerLevel: 2,
+    baseCost: 7200,
+    stat: 'clutch',
+  },
 ]
 
 function calcIncome(power: number, leagueIndex: number) {
@@ -104,9 +161,9 @@ export const useGameStore = create<GameStore>()(
       },
 
       tickLiveMatch: () => {
-        const { match } = get()
+        const { match, upgrades } = get()
         if (match.phase !== 'live') return
-        const next = tickMatch(match)
+        const next = tickMatch(match, upgrades)
         set({ match: next })
 
         if (next.phase === 'result' && next.result && next.opponentId) {
@@ -150,12 +207,18 @@ export const useGameStore = create<GameStore>()(
         )
         set({
           standings,
-          match: startMatch(s.squad, opponent, s.teamPower),
+          match: startMatch(
+            s.squad,
+            opponent,
+            s.teamPower,
+            s.match.mapId,
+            s.upgrades,
+          ),
         })
       },
 
       dismissResult: () => {
-        set({ match: createIdleMatch() })
+        set({ match: createIdleMatch(get().match.mapId) })
         get().promoteIfReady()
       },
 
@@ -175,13 +238,13 @@ export const useGameStore = create<GameStore>()(
             incomePerSec: calcIncome(teamPower, leagueIndex),
             cash: s.cash + 50000,
             gems: s.gems + 15,
-            match: createIdleMatch(),
+            match: createIdleMatch(s.match.mapId),
           })
         } else {
           set({
             matchesPlayed: 0,
             standings: buildStandings(s.teamName, s.teamPower, s.leagueIndex + 1),
-            match: createIdleMatch(),
+            match: createIdleMatch(s.match.mapId),
           })
         }
       },
@@ -289,7 +352,7 @@ export const useGameStore = create<GameStore>()(
       },
     }),
     {
-      name: 'fragline-save-v1',
+      name: 'fragline-save-v2',
       partialize: (s) => ({
         cash: s.cash,
         gems: s.gems,
@@ -307,6 +370,27 @@ export const useGameStore = create<GameStore>()(
         totalWins: s.totalWins,
         match: createIdleMatch(),
       }),
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<GameState>
+        const savedLevels = new Map(
+          (p.upgrades ?? []).map((u) => [u.id, u.level]),
+        )
+        const upgrades = DEFAULT_UPGRADES.map((u) => ({
+          ...u,
+          level: savedLevels.get(u.id) ?? 1,
+        }))
+        const squad = p.squad ?? current.squad
+        const teamPower = syncPower(squad, upgrades)
+        return {
+          ...current,
+          ...p,
+          upgrades,
+          teamPower,
+          incomePerSec: calcIncome(teamPower, p.leagueIndex ?? 0),
+          match: createIdleMatch(),
+          screen: current.screen,
+        }
+      },
     },
   ),
 )

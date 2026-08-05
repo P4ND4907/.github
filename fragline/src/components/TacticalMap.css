@@ -31,9 +31,16 @@
 }
 
 .map-block {
-  fill: rgba(8, 10, 14, 0.72);
-  stroke: rgba(140, 160, 190, 0.18);
-  stroke-width: 0.5;
+  fill: rgba(8, 10, 14, 0.82);
+  stroke: rgba(140, 160, 190, 0.22);
+  stroke-width: 0.55;
+}
+
+.map-corridor {
+  stroke: color-mix(in srgb, var(--map-accent, #3aa0ff) 28%, transparent);
+  stroke-width: 5.5;
+  stroke-linecap: round;
+  opacity: 0.85;
 }
 
 .site-ring {

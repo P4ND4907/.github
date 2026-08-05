@@ -1,4 +1,5 @@
-import { formatClock } from '../lib/matchSim'
+import { getMap } from '../data/map'
+import { formatClock, idlePreviewPlayers } from '../lib/matchSim'
 import { useGameStore } from '../store/gameStore'
 import { TacticalMap } from './TacticalMap'
 import './MatchPanel.css'
@@ -18,6 +19,8 @@ export function MatchPanel() {
   const enemyPower = opponent?.power ?? Math.round(teamPower * 0.9)
   const live = match.phase === 'live'
   const done = match.phase === 'result'
+  const map = getMap(match.mapId)
+  const previewPlayers = idlePreviewPlayers(map)
 
   return (
     <section className="panel match-panel">
@@ -48,25 +51,23 @@ export function MatchPanel() {
         <div className="clock-chip">
           {live ? formatClock(match.timeLeft) : done ? 'FT' : 'BO16'}
         </div>
-        <div className="map-chip">{match.mapName}</div>
+        <div className="map-chip" style={{ color: map.accent }}>
+          {match.mapName}
+        </div>
       </div>
 
       {match.phase === 'idle' ? (
         <div className="map-placeholder">
-          <TacticalMap
-            players={[
-              { id: 'a1', name: 'ready', team: 'ally', x: 30, y: 60, alive: true, targetX: 30, targetY: 60 },
-              { id: 'a2', name: 'ready', team: 'ally', x: 40, y: 70, alive: true, targetX: 40, targetY: 70 },
-              { id: 'e1', name: 'wait', team: 'enemy', x: 70, y: 30, alive: true, targetX: 70, targetY: 30 },
-              { id: 'e2', name: 'wait', team: 'enemy', x: 62, y: 40, alive: true, targetX: 62, targetY: 40 },
-            ]}
-          />
+          <TacticalMap players={previewPlayers} mapId={match.mapId} />
           <div className="idle-overlay">
-            <p>Queue the next league match and watch the rounds unfold.</p>
+            <p>
+              Next map: <strong>{match.mapName}</strong>. Queue up and watch the
+              corridors unfold.
+            </p>
           </div>
         </div>
       ) : (
-        <TacticalMap players={match.players} live={live} />
+        <TacticalMap players={match.players} mapId={match.mapId} live={live} />
       )}
 
       {match.events.length > 0 && (
