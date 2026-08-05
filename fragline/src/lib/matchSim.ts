@@ -1,5 +1,4 @@
 import {
-  cellCenter,
   findGridPath,
   getMap,
   pathToWorld,
@@ -139,13 +138,20 @@ function assignRoamPath(
   dest: GridPoint,
 ): MatchPlayer {
   const from = worldToCell(p.x, p.y)
-  const cells = findGridPath(map, from, dest)
-  // skip current cell
+  let cells = findGridPath(map, from, dest)
+
+  // Never beam across the map — if BFS failed, step to a neighbor instead
+  if (cells.length <= 1) {
+    const near = randomOpenCell(map, from, 2)
+    cells = findGridPath(map, from, near)
+  }
+
   const world = pathToWorld(cells.slice(1))
   if (!world.length) {
-    const c = cellCenter(dest.col, dest.row)
-    return { ...p, waypoints: [], targetX: c.x, targetY: c.y }
+    // Stay put rather than clipping through walls
+    return { ...p, waypoints: [], targetX: p.x, targetY: p.y }
   }
+
   const [first, ...rest] = world
   return {
     ...p,

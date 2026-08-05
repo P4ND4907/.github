@@ -77,10 +77,10 @@ function fromGrid(
     for (let c = 0; c < GRID; c++) {
       if (!grid[r][c]) continue
       blocks.push({
-        x: c * CELL + 1,
-        y: r * CELL + 1,
-        w: CELL - 2,
-        h: CELL - 2,
+        x: c * CELL + 0.35,
+        y: r * CELL + 0.35,
+        w: CELL - 0.7,
+        h: CELL - 0.7,
       })
     }
   }
@@ -518,10 +518,10 @@ export function randomOpenCell(map: GameMap, near?: GridPoint, radius = 4): Grid
 export function pathToWorld(path: GridPoint[]): { x: number; y: number }[] {
   return path.map((p) => {
     const { x, y } = cellCenter(p.col, p.row)
-    // slight jitter inside cell so pawns don't stack perfectly
+    // Keep pawns near cell center so they stay in the corridor
     return {
-      x: x + (Math.random() * 2.4 - 1.2),
-      y: y + (Math.random() * 2.4 - 1.2),
+      x: x + (Math.random() * 1.2 - 0.6),
+      y: y + (Math.random() * 1.2 - 0.6),
     }
   })
 }
