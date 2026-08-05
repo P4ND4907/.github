@@ -1,0 +1,95 @@
+export const HANDLES = [
+  'kscerato',
+  'cobaltz',
+  'apexx',
+  'razor0',
+  'dek0o',
+  'n0flash',
+  's1mplez',
+  'vanta',
+  'hexor',
+  'bl1tz',
+  'frosty',
+  'nyx',
+  'zero2',
+  'kairo',
+  'pulse',
+  'drift',
+  'nox',
+  'riptide',
+  'shade',
+  'volt',
+  'echo',
+  'orbit',
+  'pixel',
+  'glitch',
+  'raven',
+  'cipher',
+  'strider',
+  'wraith',
+  'talon',
+  'quark',
+]
+
+export const TEAM_POOL = [
+  { name: 'Basemnt POL', tag: 'BMT' },
+  { name: 'PingLords FIN', tag: 'PLF' },
+  { name: 'Northcore', tag: 'NRC' },
+  { name: 'Sierra-Atlas', tag: 'SAT' },
+  { name: 'Volt Syndicate', tag: 'VLT' },
+  { name: 'Ash Circuit', tag: 'ASH' },
+  { name: 'Redline EU', tag: 'RLN' },
+  { name: 'Night Ops KR', tag: 'NOP' },
+  { name: 'Havoc BR', tag: 'HVC' },
+  { name: 'Static Wave', tag: 'STW' },
+  { name: 'Iron Spire', tag: 'ISP' },
+  { name: 'Ghost Protocol', tag: 'GPR' },
+]
+
+export const LEAGUES = [
+  {
+    id: 'faceit1',
+    name: 'LEAGUE 1 FACEIT',
+    tier: 1,
+    matchesTotal: 9,
+    promotionLabel: 'Promotion — League 2 ESL ONE',
+  },
+  {
+    id: 'esl2',
+    name: 'LEAGUE 2 ESL ONE',
+    tier: 2,
+    matchesTotal: 11,
+    promotionLabel: 'Promotion — League 3 BLAST',
+  },
+  {
+    id: 'blast3',
+    name: 'LEAGUE 3 BLAST',
+    tier: 3,
+    matchesTotal: 13,
+    promotionLabel: 'Promotion — Pro Circuit',
+  },
+  {
+    id: 'pro',
+    name: 'PRO CIRCUIT',
+    tier: 4,
+    matchesTotal: 15,
+    promotionLabel: 'Top of the world',
+  },
+] as const
+
+export const ROLE_LABELS = {
+  ENT: 'Entry',
+  IGL: 'IGL',
+  SUP: 'Support',
+  LURK: 'Lurker',
+  AWP: 'AWPer',
+} as const
+
+export const SKILL_LABELS = {
+  aim: 'Aim',
+  reflex: 'Reflex',
+  recoil: 'Recoil',
+  positioning: 'Positioning',
+  utility: 'Utility',
+  clutch: 'Clutch',
+} as const

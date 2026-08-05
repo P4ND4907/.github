@@ -1,0 +1,107 @@
+.tactical-map {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1.15 / 1;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #141a22;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.35);
+}
+
+.tactical-map.is-live::after {
+  content: 'LIVE';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  color: #04140c;
+  background: var(--go);
+  padding: 2px 7px;
+  border-radius: 4px;
+  animation: fireFlicker 1.2s ease-in-out infinite;
+}
+
+.map-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.map-block {
+  fill: rgba(8, 10, 14, 0.72);
+  stroke: rgba(140, 160, 190, 0.18);
+  stroke-width: 0.5;
+}
+
+.site-ring {
+  fill: rgba(255, 200, 87, 0.08);
+  stroke: rgba(255, 200, 87, 0.55);
+  stroke-width: 0.6;
+}
+
+.site-label {
+  fill: var(--warn);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.pawn {
+  transition: transform 180ms linear;
+}
+
+.pawn-body {
+  fill: var(--ally);
+}
+
+.pawn.enemy .pawn-body {
+  fill: var(--enemy);
+}
+
+.pawn-ring {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 0.35;
+}
+
+.pawn.ally .pawn-ring {
+  stroke: rgba(58, 160, 255, 0.7);
+}
+
+.pawn.enemy .pawn-ring {
+  stroke: rgba(255, 122, 47, 0.7);
+}
+
+.pawn.down {
+  opacity: 0.28;
+}
+
+.pawn.down .pawn-body {
+  fill: #667084;
+}
+
+.pawn-name {
+  fill: #f2f6ff;
+  font-size: 3.1px;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.85);
+  stroke-width: 0.7px;
+}
+
+.combat-fx {
+  animation: fireFlicker 0.7s ease-in-out infinite;
+}
+
+.fx-glow {
+  fill: rgba(255, 122, 47, 0.25);
+}
+
+.fx-flame {
+  fill: #ff8a3d;
+}

@@ -1,0 +1,61 @@
+.upgrade-panel .panel-title {
+  margin-bottom: 0;
+}
+
+.upgrade-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.upgrade-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--line);
+}
+
+.upgrade-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 200, 87, 0.12);
+  border: 1px solid rgba(255, 200, 87, 0.25);
+}
+
+.upgrade-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.upgrade-body strong {
+  font-size: 0.9rem;
+}
+
+.upgrade-body span {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.upgrade-btn {
+  flex-direction: column;
+  gap: 1px;
+  min-height: 44px;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+.upgrade-btn small {
+  font-size: 0.68rem;
+  opacity: 0.9;
+}

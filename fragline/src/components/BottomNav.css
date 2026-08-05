@@ -1,0 +1,38 @@
+.bottom-nav {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 8px 10px calc(8px + var(--safe-bottom));
+  border-top: 1px solid var(--line);
+  background: rgba(10, 12, 16, 0.92);
+  backdrop-filter: blur(12px);
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.nav-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.nav-item.active {
+  color: var(--text);
+  background: linear-gradient(180deg, rgba(58, 160, 255, 0.18), rgba(58, 160, 255, 0.06));
+  box-shadow: inset 0 0 0 1px rgba(58, 160, 255, 0.25);
+}
+
+.nav-item:active {
+  transform: scale(0.96);
+}
