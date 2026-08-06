@@ -291,6 +291,26 @@ export function TacticalMap({
             </text>
           ))}
 
+        {/* Selected unit path preview */}
+        {(() => {
+          const sel = players.find((p) => p.id === selectedUnitId && p.alive)
+          if (!sel || sel.team !== 'ally') return null
+          const from = renderRef.current[sel.id] ?? sel
+          const pts = [
+            `${from.x},${from.y}`,
+            `${sel.targetX},${sel.targetY}`,
+            ...sel.waypoints.map((w) => `${w.x},${w.y}`),
+          ]
+          if (pts.length < 2) return null
+          return (
+            <polyline
+              points={pts.join(' ')}
+              className="path-preview"
+              fill="none"
+            />
+          )
+        })()}
+
         {/* Aim lasers — unique broadcast cue while locking a target */}
         <g className="aim-layer">
           {aimBeams.map((b) => (
@@ -483,6 +503,11 @@ export function TacticalMap({
                 <text y="-6.2" textAnchor="middle" className="pawn-name">
                   {p.name}
                 </text>
+                {p.id === selectedUnitId && p.alive && (
+                  <text y="9.2" textAnchor="middle" className="pawn-role">
+                    {p.role}
+                  </text>
+                )}
               </g>
             )
           })}

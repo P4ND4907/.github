@@ -173,6 +173,10 @@ export interface MatchState {
   bannerTime: number
   /** Active IGL callout biasing AI this round */
   callout: string | null
+  /** Site pressure 0–100 — who owns A/B this round */
+  siteControl: number
+  /** Contested site label for HUD */
+  hotSite: 'A' | 'B' | null
 }
 
 export interface GameState {

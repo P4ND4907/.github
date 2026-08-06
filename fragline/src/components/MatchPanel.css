@@ -190,6 +190,57 @@
   letter-spacing: 0.08em;
 }
 
+.site-chip {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
+}
+
+.site-chip.ally {
+  color: #3dd68c;
+  border-color: rgba(61, 214, 140, 0.4);
+}
+
+.site-chip.enemy {
+  color: #e85d4c;
+  border-color: rgba(232, 93, 76, 0.4);
+}
+
+.unit-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hold-btn {
+  min-height: 32px;
+  padding: 0 10px;
+  font-family: var(--font-display);
+  letter-spacing: 0.12em;
+  border-color: rgba(232, 197, 71, 0.4) !important;
+  color: #e8c547 !important;
+}
+
+.idle-cta-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.idle-cta-row .play-btn {
+  width: 100%;
+}
+
+.scout-btn {
+  min-width: 88px;
+  color: #e8c547 !important;
+  border-color: rgba(232, 197, 71, 0.35) !important;
+}
+
 .role-tag {
   margin-left: 4px;
   font-style: normal;

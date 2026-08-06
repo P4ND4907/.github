@@ -116,6 +116,31 @@
   fill: #e8c547;
 }
 
+.path-preview {
+  stroke: rgba(232, 197, 71, 0.75);
+  stroke-width: 1.1;
+  stroke-dasharray: 3 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  pointer-events: none;
+  animation: path-dash 0.8s linear infinite;
+}
+
+@keyframes path-dash {
+  to {
+    stroke-dashoffset: -10;
+  }
+}
+
+.pawn-role {
+  font-family: var(--font-mono);
+  font-size: 3.8px;
+  font-weight: 600;
+  fill: #e8c547;
+  letter-spacing: 0.1em;
+  pointer-events: none;
+}
+
 .aim-beam {
   stroke-linecap: round;
   pointer-events: none;

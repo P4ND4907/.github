@@ -31,6 +31,9 @@ export function MatchPanel() {
   const cycleMap = useGameStore((s) => s.cycleMap)
   const selectMatchUnit = useGameStore((s) => s.selectMatchUnit)
   const commandSelectedUnit = useGameStore((s) => s.commandSelectedUnit)
+  const holdSelectedUnit = useGameStore((s) => s.holdSelectedUnit)
+  const scoutRival = useGameStore((s) => s.scoutRival)
+  const gems = useGameStore((s) => s.gems)
   const upgradeSkill = useGameStore((s) => s.upgradeSkill)
 
   const lastUpgradeId = useGameStore((s) => s.lastUpgradeId)
@@ -148,6 +151,20 @@ export function MatchPanel() {
             {alliesAlive}/{enemiesAlive}
           </div>
         )}
+        {live && (
+          <div
+            className={`site-chip ${
+              (match.siteControl ?? 50) >= 55
+                ? 'ally'
+                : (match.siteControl ?? 50) <= 45
+                  ? 'enemy'
+                  : ''
+            }`}
+            title="Site control"
+          >
+            SITE {match.hotSite ?? '—'} {Math.round(match.siteControl ?? 50)}%
+          </div>
+        )}
       </div>
 
       {match.phase === 'idle' ? (
@@ -223,9 +240,19 @@ export function MatchPanel() {
                     {selected.name}{' '}
                     <span className="tag">{selected.role}</span>
                   </strong>
-                  <p className="muted">Train live — combat updates instantly</p>
+                  <p className="muted">Tap map to move · HOLD locks the angle</p>
                 </div>
-                <span className="pill">CBM {selected.combat}</span>
+                <div className="unit-actions">
+                  <button
+                    type="button"
+                    className="btn btn-ghost hold-btn"
+                    disabled={!selected.alive}
+                    onClick={holdSelectedUnit}
+                  >
+                    HOLD
+                  </button>
+                  <span className="pill">CBM {selected.combat}</span>
+                </div>
               </div>
               <div className="quick-skills">
                 {QUICK_SKILLS.map((skill) => {
@@ -281,9 +308,19 @@ export function MatchPanel() {
       )}
 
       {match.phase === 'idle' && (
-        <button className="btn btn-primary play-btn" onClick={playMatch}>
-          Play game <span aria-hidden>›</span>
-        </button>
+        <div className="idle-cta-row">
+          <button className="btn btn-primary play-btn" onClick={playMatch}>
+            Play game <span aria-hidden>›</span>
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost scout-btn"
+            disabled={gems < 5}
+            onClick={scoutRival}
+          >
+            Scout ◆5
+          </button>
+        </div>
       )}
     </section>
   )

@@ -181,6 +181,8 @@ export function createIdleMatch(excludeMapId?: string | null): MatchState {
     roundBanner: null,
     bannerTime: 0,
     callout: null,
+    siteControl: 50,
+    hotSite: null,
   }
 }
 
@@ -291,6 +293,8 @@ export function startMatch(
     roundBanner: openingCall.label,
     bannerTime: 2.4,
     callout: openingCall.id,
+    siteControl: 50,
+    hotSite: null,
   }
 }
 
@@ -372,6 +376,36 @@ export function commandUnitTo(
     selectedUnitId: unitId,
     orderMarker: { x: cell.col * 10 + 5, y: cell.row * 10 + 5 },
     events: events.slice(-8),
+  }
+}
+
+export function commandHoldAngle(state: MatchState, unitId: string): MatchState {
+  if (state.phase !== 'live') return state
+  const players = state.players.map((p) => {
+    if (p.id !== unitId || p.team !== 'ally' || !p.alive) return p
+    // Freeze on current cell as a hard hold
+    return {
+      ...p,
+      waypoints: [],
+      targetX: p.x,
+      targetY: p.y,
+      orderedTime: 14,
+      commitTime: 14,
+      aimTargetId: p.aimTargetId,
+    }
+  })
+  const unit = players.find((p) => p.id === unitId)
+  const events = unit
+    ? [...state.events, `${unit.name} HOLDING ANGLE`]
+    : state.events
+  return {
+    ...state,
+    players,
+    selectedUnitId: unitId,
+    orderMarker: unit ? { x: unit.x, y: unit.y } : state.orderMarker,
+    events: events.slice(-8),
+    roundBanner: unit ? `${unit.name.toUpperCase()} HOLD` : state.roundBanner,
+    bannerTime: unit ? 1.1 : state.bannerTime,
   }
 }
 
@@ -1106,19 +1140,49 @@ export function tickMatch(
 
   const alliesAlive = players.filter((p) => p.alive && p.team === 'ally').length
   const enemiesAlive = players.filter((p) => p.alive && p.team === 'enemy').length
+
+  // Site control — unique FRAGLINE objective layer
+  let siteControl = state.siteControl ?? 50
+  let hotSite: 'A' | 'B' | null = state.hotSite ?? null
+  {
+    const sites = map.zones.filter((z) => z.site)
+    let best: { site: 'A' | 'B'; score: number } | null = null
+    for (const z of sites) {
+      if (!z.site) continue
+      const nearAlly = players.filter(
+        (p) => p.alive && p.team === 'ally' && Math.hypot(p.x - z.x, p.y - z.y) < 18,
+      ).length
+      const nearEnemy = players.filter(
+        (p) => p.alive && p.team === 'enemy' && Math.hypot(p.x - z.x, p.y - z.y) < 18,
+      ).length
+      const score = nearAlly - nearEnemy
+      if (!best || Math.abs(score) > Math.abs(best.score)) {
+        best = { site: z.site, score }
+      }
+      siteControl += (nearAlly - nearEnemy) * 7 * dt
+    }
+    siteControl = Math.max(0, Math.min(100, siteControl))
+    hotSite = best?.site ?? null
+    if (best && Math.abs(best.score) >= 2 && Math.random() < 0.015) {
+      events.push(
+        best.score > 0
+          ? `Site ${best.site} pressure · ${Math.round(siteControl)}%`
+          : `Losing site ${best.site} · ${Math.round(siteControl)}%`,
+      )
+    }
+  }
+
   const roundOver = timeLeft <= 0 || alliesAlive === 0 || enemiesAlive === 0
 
   if (roundOver) {
     const sitePressure = buffs.strategy * 0.06
-    // Time-up favors the side with more alive (site control proxy)
+    // Time-up: site control decides (not a coin flip)
     const allyWonRound =
       enemiesAlive === 0 ||
+      (timeLeft <= 0 && siteControl >= 55) ||
+      (timeLeft <= 0 && siteControl > 45 && alliesAlive > enemiesAlive) ||
       (alliesAlive > 0 && enemiesAlive === 0) ||
-      (timeLeft <= 0 && alliesAlive > enemiesAlive) ||
-      (timeLeft <= 0 &&
-        alliesAlive === enemiesAlive &&
-        Math.random() * 100 < state.winChance + buffs.clutch * 2.5 + sitePressure * 40) ||
-      (alliesAlive > enemiesAlive && Math.random() < 0.35 + sitePressure)
+      (alliesAlive > enemiesAlive && Math.random() < 0.22 + sitePressure)
 
     if (allyWonRound) {
       allyScore += 1
@@ -1165,6 +1229,8 @@ export function tickMatch(
           result === 'win' ? 'MATCH WON' : result === 'draw' ? 'DRAW' : 'MATCH LOST',
         bannerTime: 2.2,
         callout: null,
+        siteControl,
+        hotSite,
       }
     }
 
@@ -1172,6 +1238,8 @@ export function tickMatch(
     callout = nextCall.id
     roundBanner = `${roundBanner ?? 'ROUND'} · ${nextCall.label}`
     bannerTime = 2.2
+    siteControl = 50
+    hotSite = null
 
     timeLeft = 70
     orderMarker = null
@@ -1230,6 +1298,8 @@ export function tickMatch(
     roundBanner,
     bannerTime,
     callout,
+    siteControl,
+    hotSite,
   }
 }
 

@@ -22,6 +22,7 @@ import {
   createIdleMatch,
   startMatch,
   tickMatch,
+  commandHoldAngle,
   commandUnitTo,
   selectMatchUnit as selectUnitInMatch,
   syncAllyStats,
@@ -121,6 +122,8 @@ interface GameStore extends GameState {
   cycleMap: () => void
   selectMatchUnit: (id: string) => void
   commandSelectedUnit: (x: number, y: number) => void
+  holdSelectedUnit: () => void
+  scoutRival: () => void
   buyUpgrade: (id: string) => void
   upgradeSkill: (playerId: string, skill: SkillKey) => void
   selectPlayer: (id: string | null) => void
@@ -366,6 +369,34 @@ export const useGameStore = create<GameStore>()(
         const id = s.match.selectedUnitId
         if (!id) return
         set({ match: commandUnitTo(s.match, id, x, y) })
+      },
+
+      holdSelectedUnit: () => {
+        const s = get()
+        if (s.match.phase !== 'live') return
+        const id = s.match.selectedUnitId
+        if (!id) return
+        set({ match: commandHoldAngle(s.match, id) })
+      },
+
+      scoutRival: () => {
+        const s = get()
+        if (s.gems < 5) return
+        const rival = s.standings.find((t) => !t.isPlayer)
+        if (!rival) return
+        const lesson = `Scouted ${rival.name} — expect ${
+          rival.power > s.teamPower ? 'aggressive defaults' : 'passive stacks'
+        }`
+        set({
+          gems: s.gems - 5,
+          brain: grantXp(s.brain, 12, lesson),
+          match: {
+            ...s.match,
+            events: [...s.match.events, lesson].slice(-8),
+            roundBanner: s.match.phase === 'idle' ? `SCOUT · ${rival.tag}` : s.match.roundBanner,
+            bannerTime: s.match.phase === 'idle' ? 1.6 : s.match.bannerTime,
+          },
+        })
       },
 
       promoteIfReady: () => {
