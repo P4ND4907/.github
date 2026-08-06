@@ -71,16 +71,33 @@
 
 /* Warm walkable pads — architecture, not a path graph */
 .floor-pad {
-  fill: rgba(54, 44, 34, 0.72);
-  stroke: rgba(255, 210, 150, 0.04);
-  stroke-width: 0.35;
+  fill: rgba(62, 50, 38, 0.82);
+  stroke: rgba(255, 210, 150, 0.06);
+  stroke-width: 0.4;
   pointer-events: none;
 }
 
 .map-block {
-  fill: #1a1714;
-  stroke: rgba(255, 220, 180, 0.07);
-  stroke-width: 0.5;
+  fill: #151210;
+  stroke: rgba(255, 220, 180, 0.1);
+  stroke-width: 0.55;
+}
+
+.tactical-map.is-live.is-interactive .map-svg {
+  cursor: crosshair;
+}
+
+.tactical-map.has-frag {
+  animation: mapPunch 0.28s ease-out;
+}
+
+@keyframes mapPunch {
+  0% {
+    filter: brightness(1.25) saturate(1.15);
+  }
+  100% {
+    filter: none;
+  }
 }
 
 .site-plate {

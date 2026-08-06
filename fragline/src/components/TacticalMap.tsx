@@ -174,9 +174,15 @@ export function TacticalMap({
     strength: number
   }[]
 
+  const fragPunch = fx.some(
+    (f) => f.kind === 'float' && f.team === 'ally' && f.label === 'FRAG' && f.life > f.maxLife * 0.7,
+  )
+
   return (
     <div
-      className={`tactical-map ${live ? 'is-live' : ''} ${interactive ? 'is-interactive' : ''}`}
+      className={`tactical-map ${live ? 'is-live' : ''} ${
+        interactive ? 'is-interactive' : ''
+      } ${fragPunch ? 'has-frag' : ''}`}
       style={{ ['--map-accent' as string]: map.accent }}
     >
       <div className="map-plaque">

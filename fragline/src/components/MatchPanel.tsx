@@ -160,9 +160,10 @@ export function MatchPanel() {
                   ? 'enemy'
                   : ''
             }`}
-            title="Site control"
+            title="Site control — time-up winner"
           >
-            SITE {match.hotSite ?? '—'} {Math.round(match.siteControl ?? 50)}%
+            {match.hotSite ? `${match.hotSite}-SITE` : 'MID'}{' '}
+            {Math.round(match.siteControl ?? 50)}%
           </div>
         )}
       </div>
