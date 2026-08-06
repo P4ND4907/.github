@@ -33,6 +33,7 @@ export function MatchPanel() {
   const selectMatchUnit = useGameStore((s) => s.selectMatchUnit)
   const commandSelectedUnit = useGameStore((s) => s.commandSelectedUnit)
   const holdSelectedUnit = useGameStore((s) => s.holdSelectedUnit)
+  const pushSelectedToSite = useGameStore((s) => s.pushSelectedToSite)
   const scoutRival = useGameStore((s) => s.scoutRival)
   const gems = useGameStore((s) => s.gems)
   const upgradeSkill = useGameStore((s) => s.upgradeSkill)
@@ -288,7 +289,16 @@ export function MatchPanel() {
                     onClick={holdSelectedUnit}
                     title="Lock this unit on their current angle"
                   >
-                    {selected.orderedTime > 8 ? 'HOLDING' : 'HOLD ANGLE'}
+                    {selected.orderedTime > 8 ? 'HOLDING' : 'HOLD'}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost push-btn"
+                    disabled={!selected.alive}
+                    onClick={pushSelectedToSite}
+                    title="Send unit to contested bomb site"
+                  >
+                    PUSH {match.hotSite ?? 'A'}
                   </button>
                   <span className="pill">CBM {selected.combat}</span>
                 </div>

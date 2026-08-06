@@ -23,6 +23,7 @@ import {
   startMatch,
   tickMatch,
   commandHoldAngle,
+  commandPushSite,
   commandUnitTo,
   selectMatchUnit as selectUnitInMatch,
   syncAllyStats,
@@ -123,6 +124,7 @@ interface GameStore extends GameState {
   selectMatchUnit: (id: string) => void
   commandSelectedUnit: (x: number, y: number) => void
   holdSelectedUnit: () => void
+  pushSelectedToSite: () => void
   scoutRival: () => void
   buyUpgrade: (id: string) => void
   upgradeSkill: (playerId: string, skill: SkillKey) => void
@@ -377,6 +379,14 @@ export const useGameStore = create<GameStore>()(
         const id = s.match.selectedUnitId
         if (!id) return
         set({ match: commandHoldAngle(s.match, id) })
+      },
+
+      pushSelectedToSite: () => {
+        const s = get()
+        if (s.match.phase !== 'live') return
+        const id = s.match.selectedUnitId
+        if (!id) return
+        set({ match: commandPushSite(s.match, id) })
       },
 
       scoutRival: () => {

@@ -272,13 +272,19 @@
   gap: 6px;
 }
 
-.hold-btn {
+.hold-btn,
+.push-btn {
   min-height: 32px;
   padding: 0 10px;
   font-family: var(--font-display);
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
   border-color: rgba(232, 197, 71, 0.4) !important;
   color: #e8c547 !important;
+}
+
+.push-btn {
+  border-color: rgba(61, 214, 140, 0.45) !important;
+  color: #7eecc0 !important;
 }
 
 .idle-cta-row {

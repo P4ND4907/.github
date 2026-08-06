@@ -416,6 +416,31 @@ export function commandHoldAngle(state: MatchState, unitId: string): MatchState 
   }
 }
 
+
+export function commandPushSite(state: MatchState, unitId: string): MatchState {
+  if (state.phase !== 'live') return state
+  const map = getMap(state.mapId)
+  const site =
+    (state.hotSite && map.zones.find((z) => z.site === state.hotSite)) ||
+    map.zones.find((z) => z.site === 'A') ||
+    map.zones.find((z) => z.site === 'B')
+  if (!site) return state
+  const players = state.players.map((p) => {
+    if (p.id !== unitId || p.team !== 'ally' || !p.alive) return p
+    return assignRoamPath(map, p, { col: site.col, row: site.row }, 11)
+  })
+  const unit = players.find((p) => p.id === unitId)
+  return {
+    ...state,
+    players,
+    selectedUnitId: unitId,
+    orderMarker: { x: site.x, y: site.y },
+    events: [...state.events, `${unit?.name ?? 'Unit'} pushing ${site.site}-site`].slice(-8),
+    roundBanner: `PUSH ${site.site}`,
+    bannerTime: 1.0,
+  }
+}
+
 export function selectMatchUnit(state: MatchState, unitId: string | null): MatchState {
   return { ...state, selectedUnitId: unitId }
 }
