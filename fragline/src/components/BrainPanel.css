@@ -88,6 +88,8 @@
 .xp-bar i {
   display: block;
   height: 100%;
+  border-radius: inherit;
+  transition: width 220ms ease;
   background: linear-gradient(90deg, #c9a227, #e8c547 55%, #3dd68c);
 }
 
@@ -103,8 +105,6 @@
   50% {
     filter: brightness(1.25);
   }
-  border-radius: inherit;
-  transition: width 220ms ease;
 }
 
 .study-rate {
