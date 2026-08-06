@@ -73,7 +73,7 @@ export type MatchPhase = 'idle' | 'live' | 'result'
 
 export interface CombatFx {
   id: string
-  kind: 'shot' | 'hit' | 'kill' | 'nade' | 'claymore'
+  kind: 'shot' | 'hit' | 'kill' | 'nade' | 'claymore' | 'float'
   fromX: number
   fromY: number
   toX: number
@@ -81,6 +81,9 @@ export interface CombatFx {
   team: 'ally' | 'enemy'
   life: number
   maxLife: number
+  /** Floating text for kill/cash celebration */
+  label?: string
+  amount?: number
 }
 
 export type GadgetKind = 'claymore' | 'frag' | 'smoke'
@@ -106,6 +109,7 @@ export interface MatchPlayer {
   squadId: string | null
   name: string
   team: 'ally' | 'enemy'
+  role: PlayerRole
   x: number
   y: number
   alive: boolean
@@ -163,6 +167,12 @@ export interface MatchState {
   pendingXp: number
   /** Live lesson strings emitted this tick */
   pendingLessons: string[]
+  /** Big round-end callout shown on map */
+  roundBanner: string | null
+  /** Seconds left to show roundBanner */
+  bannerTime: number
+  /** Active IGL callout biasing AI this round */
+  callout: string | null
 }
 
 export interface GameState {

@@ -6,10 +6,10 @@ import { UpgradePanel } from '../components/UpgradePanel'
 export function HomeScreen() {
   return (
     <div className="screen stack">
-      <LeagueTable />
       <MatchPanel />
       <BrainPanel />
       <UpgradePanel />
+      <LeagueTable />
     </div>
   )
 }

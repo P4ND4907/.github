@@ -14,19 +14,20 @@ const STAT_MARK: Record<UpgradeStat, string> = {
 
 function effectLine(u: Upgrade): string {
   const lv = u.level
+  const next = lv + 1
   switch (u.stat) {
     case 'power':
-      return `Gunfight bias +${((lv - 1) * 3.5).toFixed(0)}% · live now`
+      return `Lv.${lv} → gunfight +${(lv - 1) * 3}% · next +${(next - 1) * 3}%`
     case 'intelligence':
-      return `Claymore spot ~${Math.round(claymoreSpotChance(lv) * 100)}%/s near trap`
+      return `Claymore spot ~${Math.round(claymoreSpotChance(lv) * 100)}%/s · next ~${Math.round(claymoreSpotChance(next) * 100)}%`
     case 'strategy':
-      return `Hold / flank IQ · site pressure +${(lv * 6).toFixed(0)}%`
+      return `Site pressure ${(lv * 6).toFixed(0)}% · next ${(next * 6).toFixed(0)}%`
     case 'reflex':
-      return `Move speed ${9.5 + lv * 1.4} u/s`
+      return `Move ${9.5 + lv * 1.4} u/s → next ${9.5 + next * 1.4}`
     case 'utility':
-      return `Nades & claymores · blast ×${(1 + lv * 0.12).toFixed(2)}`
+      return `Util rate & blast ×${(1 + lv * 0.12).toFixed(2)} → ×${(1 + next * 0.12).toFixed(2)}`
     case 'clutch':
-      return `Late-round swing +${(lv * 3.5).toFixed(0)}%`
+      return `Late swing +${(lv * 2.5).toFixed(0)}% → +${(next * 2.5).toFixed(0)}%`
     default:
       return u.blurb
   }
@@ -70,7 +71,7 @@ export function UpgradePanel() {
                 <strong>{u.name}</strong>
                 <span className="upgrade-level">
                   Lv. {u.level}
-                  <em>ACTIVE</em>
+                  <em>→ {u.level + 1}</em>
                 </span>
                 <span className="upgrade-effect">{effectLine(u)}</span>
                 <span className="upgrade-blurb">{u.blurb}</span>

@@ -348,7 +348,9 @@ export function TacticalMap({
         )}
 
         <g className="fx-layer">
-          {fx.map((f) => {
+          {fx
+            .filter((f) => f.kind !== 'float')
+            .map((f) => {
             const t = f.life / f.maxLife
             if (f.kind === 'shot') {
               const dx = f.toX - f.fromX
@@ -484,6 +486,30 @@ export function TacticalMap({
               </g>
             )
           })}
+        </g>
+
+        {/* Kill / cash floats above pawns so they read on broadcast */}
+        <g className="float-layer">
+          {fx
+            .filter((f) => f.kind === 'float')
+            .map((f) => {
+              const t = f.life / f.maxLife
+              const rise = (1 - t) * 14
+              return (
+                <g
+                  key={f.id}
+                  className={`fx-float ${f.team} ${
+                    f.label?.includes('$') ? 'cash' : 'frag'
+                  }`}
+                  transform={`translate(${f.fromX} ${f.fromY - rise})`}
+                  opacity={Math.min(1, t * 1.8)}
+                >
+                  <text textAnchor="middle" className="fx-float-label">
+                    {f.label ?? 'FRAG'}
+                  </text>
+                </g>
+              )
+            })}
         </g>
 
         {/* Soft edge vignette — dark frame, no blue graph overlay */}

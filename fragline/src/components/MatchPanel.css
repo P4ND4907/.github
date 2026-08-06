@@ -132,6 +132,78 @@
   animation: pulseGlow 1.4s ease-in-out infinite;
 }
 
+.live-map-wrap {
+  position: relative;
+}
+
+.round-banner-pop {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  z-index: 6;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #f8f4e8;
+  background: rgba(8, 8, 7, 0.78);
+  border: 1px solid rgba(232, 197, 71, 0.45);
+  padding: 10px 16px;
+  border-radius: 6px;
+  pointer-events: none;
+  animation: bannerIn 0.35s ease-out;
+  white-space: nowrap;
+  max-width: 92%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes bannerIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -40%) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.round-chip,
+.alive-chip,
+.callout-chip {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+.callout-chip {
+  text-align: center;
+  color: #e8c547;
+  border-color: rgba(232, 197, 71, 0.35);
+  letter-spacing: 0.08em;
+}
+
+.role-tag {
+  margin-left: 4px;
+  font-style: normal;
+  font-size: 0.58rem;
+  color: #e8c547;
+  letter-spacing: 0.06em;
+}
+
+.unit-chip strong {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .battle-dock {
   display: flex;
   flex-direction: column;

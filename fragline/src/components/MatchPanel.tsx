@@ -46,7 +46,7 @@ export function MatchPanel() {
   const done = match.phase === 'result'
   const map = getMap(match.mapId)
   const previewPlayers = idlePreviewPlayers(map)
-  const buffs = buffsWithBrain(buffsFromUpgrades(upgrades), brain)
+  const brainBuffs = buffsWithBrain(buffsFromUpgrades(upgrades), brain)
 
   const selected =
     match.players.find((p) => p.id === match.selectedUnitId) ??
@@ -55,14 +55,29 @@ export function MatchPanel() {
     ? squad.find((p) => p.id === selected.squadId)
     : null
 
-  const buffChips: { id: string; label: string; value: number }[] = [
-    { id: 'power', label: 'PWR', value: buffs.power },
-    { id: 'intelligence', label: 'INT', value: buffs.intelligence },
-    { id: 'strategy', label: 'STR', value: buffs.strategy },
-    { id: 'reflex', label: 'RFX', value: buffs.reflex },
-    { id: 'utility', label: 'UTL', value: buffs.utility },
-    { id: 'clutch', label: 'CLU', value: buffs.clutch },
-  ]
+  const buffChips = upgrades.map((u) => ({
+    id: u.id,
+    label:
+      u.id === 'power'
+        ? 'PWR'
+        : u.id === 'intelligence'
+          ? 'INT'
+          : u.id === 'strategy'
+            ? 'STR'
+            : u.id === 'reflex'
+              ? 'RFX'
+              : u.id === 'utility'
+                ? 'UTL'
+                : 'CLU',
+    level: u.level,
+  }))
+
+  const alliesAlive = match.players.filter((p) => p.alive && p.team === 'ally').length
+  const enemiesAlive = match.players.filter((p) => p.alive && p.team === 'enemy').length
+  const xpPct = Math.min(
+    100,
+    Math.round(((brain.xp ?? 0) / Math.max(1, brain.xpToNext ?? 70)) * 100),
+  )
 
   function jumpToUpgrade(id: string) {
     document.getElementById(`upgrade-${id}`)?.scrollIntoView({
@@ -93,7 +108,7 @@ export function MatchPanel() {
         </div>
       </div>
 
-      <div className="buff-strip" title="Team upgrade levels — tap to jump">
+      <div className="buff-strip" title="Upgrade levels — tap to jump">
         {buffChips.map((b) => (
           <button
             key={b.id}
@@ -103,16 +118,20 @@ export function MatchPanel() {
             }`}
             onClick={() => jumpToUpgrade(b.id)}
           >
-            <em>{b.label}</em>{' '}
-            {Number.isInteger(b.value) ? b.value : b.value.toFixed(1)}
+            <em>{b.label}</em> Lv.{b.level}
           </button>
         ))}
       </div>
 
       <div className="match-meta">
         <div className="score-chip">
-          {live || done ? `${match.allyScore} – ${match.enemyScore}` : 'READY'}
+          {live || done
+            ? `${match.allyScore} – ${match.enemyScore}`
+            : 'READY'}
         </div>
+        {(live || done) && (
+          <div className="round-chip">R{match.round}/{match.maxRounds}</div>
+        )}
         <div className="clock-chip">
           {live ? formatClock(match.timeLeft) : done ? 'FT' : 'BO16'}
         </div>
@@ -124,6 +143,11 @@ export function MatchPanel() {
             Next map
           </button>
         )}
+        {live && (
+          <div className="alive-chip">
+            {alliesAlive}/{enemiesAlive}
+          </div>
+        )}
       </div>
 
       {match.phase === 'idle' ? (
@@ -131,31 +155,40 @@ export function MatchPanel() {
           <TacticalMap players={previewPlayers} mapId={match.mapId} />
           <div className="idle-overlay">
             <p>
-              Next map: <strong>{match.mapName}</strong>. Squad IQ{' '}
-              <strong>{brain.iq}</strong> is studying holds & flanks while idle —
-              play a match to teach them live.
+              <strong>{match.mapName}</strong> · IQ <strong>{brain.iq}</strong>{' '}
+              studying ({xpPct}% to next) · brain edge{' '}
+              <strong>+{brainBuffs.power.toFixed(1)}</strong> PWR
             </p>
           </div>
         </div>
       ) : (
-        <TacticalMap
-          players={match.players}
-          mapId={match.mapId}
-          live={live}
-          interactive={live}
-          selectedUnitId={match.selectedUnitId}
-          orderMarker={match.orderMarker}
-          fx={match.fx}
-          gadgets={match.gadgets ?? []}
-          onSelectUnit={selectMatchUnit}
-          onCommandMove={commandSelectedUnit}
-        />
+        <div className="live-map-wrap">
+          <TacticalMap
+            players={match.players}
+            mapId={match.mapId}
+            live={live}
+            interactive={live}
+            selectedUnitId={match.selectedUnitId}
+            orderMarker={match.orderMarker}
+            fx={match.fx}
+            gadgets={match.gadgets ?? []}
+            onSelectUnit={selectMatchUnit}
+            onCommandMove={commandSelectedUnit}
+          />
+          {live && match.roundBanner && (match.bannerTime ?? 0) > 0 && (
+            <div className="round-banner-pop">{match.roundBanner}</div>
+          )}
+        </div>
       )}
 
       {live && match.fragStreak >= 2 && (
         <div className="streak-banner">
           {match.fragStreak}x FRAG STREAK — keep the pressure on
         </div>
+      )}
+
+      {live && match.callout && (
+        <div className="callout-chip">IGL · {match.callout.replace(/_/g, ' ').toUpperCase()}</div>
       )}
 
       {live && (
@@ -171,7 +204,10 @@ export function MatchPanel() {
                   }`}
                   onClick={() => selectMatchUnit(p.id)}
                 >
-                  <strong>{p.name}</strong>
+                  <strong>
+                    {p.name}
+                    <em className="role-tag">{p.role}</em>
+                  </strong>
                   <span>
                     {p.alive ? `HP ${p.hp}` : 'DOWN'} · CBM {p.combat}
                   </span>
@@ -183,10 +219,11 @@ export function MatchPanel() {
             <div className="unit-train">
               <div className="row space">
                 <div>
-                  <strong>{selected.name}</strong>
-                  <p className="muted">
-                    Upgrade this unit — combat & speed update live
-                  </p>
+                  <strong>
+                    {selected.name}{' '}
+                    <span className="tag">{selected.role}</span>
+                  </strong>
+                  <p className="muted">Train live — combat updates instantly</p>
                 </div>
                 <span className="pill">CBM {selected.combat}</span>
               </div>
@@ -214,49 +251,14 @@ export function MatchPanel() {
         </div>
       )}
 
-      {live && (
-        <div className="live-data" aria-live="polite">
-          {(() => {
-            const jammed = match.players.filter(
-              (p) => p.alive && (p.stuckTime ?? 0) > 0.25,
-            ).length
-            const moving = match.players.filter(
-              (p) =>
-                p.alive &&
-                (p.waypoints.length > 0 ||
-                  Math.hypot(p.targetX - p.x, p.targetY - p.y) > 1.5),
-            ).length
-            const clays = (match.gadgets ?? []).filter((g) => g.kind === 'claymore')
-              .length
-            return (
-              <>
-                <span>{moving} moving</span>
-                <span className={jammed > 0 ? 'warn' : ''}>{jammed} jammed</span>
-                <span>{clays} clay</span>
-                <span>
-                  {
-                    match.players.filter((p) => p.alive && p.team === 'ally').length
-                  }
-                  /
-                  {
-                    match.players.filter((p) => p.alive && p.team === 'enemy')
-                      .length
-                  }{' '}
-                  alive
-                </span>
-              </>
-            )
-          })()}
-        </div>
-      )}
-
       {match.events.length > 0 && (
         <ul className="match-feed">
-          {match.events.slice(-5).map((e, i) => (
-            <li key={`${e}-${i}`} className={e.startsWith('LIVE') ? 'telemetry' : ''}>
-              {e}
-            </li>
-          ))}
+          {match.events
+            .filter((e) => !e.startsWith('LIVE'))
+            .slice(-4)
+            .map((e, i) => (
+              <li key={`${e}-${i}`}>{e}</li>
+            ))}
         </ul>
       )}
 
@@ -272,8 +274,8 @@ export function MatchPanel() {
           <span>
             {match.allyScore} – {match.enemyScore}
           </span>
-          <button className="btn btn-ghost" onClick={dismissResult}>
-            Continue
+          <button className="btn btn-primary" onClick={dismissResult}>
+            Collect & continue
           </button>
         </div>
       )}

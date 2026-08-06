@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { describePlaybook } from '../lib/learning'
 import { useGameStore } from '../store/gameStore'
 import type { Playbook } from '../types'
@@ -11,6 +12,14 @@ const PILLARS: { key: keyof Playbook; label: string }[] = [
   { key: 'clutch', label: 'Clutch' },
 ]
 
+const STUDY_LINES = [
+  'Scrubbing entry timings…',
+  'Marking crossfire angles…',
+  'Drilling utility lineups…',
+  'Rewatching lost retakes…',
+  'Mapping lurk timings…',
+]
+
 export function BrainPanel() {
   const brain = useGameStore((s) => s.brain)
   const matchPhase = useGameStore((s) => s.match.phase)
@@ -19,6 +28,18 @@ export function BrainPanel() {
   const xpPct = Math.min(100, (brain.xp / Math.max(1, brain.xpToNext)) * 100)
   const mapRead = Math.round(brain.mapMemory[mapId] ?? 0)
   const studying = brain.idleStudying && matchPhase !== 'live'
+  const [lessonIdx, setLessonIdx] = useState(0)
+  const weakest = PILLARS.reduce((a, b) =>
+    brain.playbook[a.key] <= brain.playbook[b.key] ? a : b,
+  )
+
+  useEffect(() => {
+    if (!studying) return
+    const id = window.setInterval(() => {
+      setLessonIdx((i) => (i + 1) % STUDY_LINES.length)
+    }, 2800)
+    return () => window.clearInterval(id)
+  }, [studying])
 
   return (
     <section className="panel brain-panel">
@@ -45,12 +66,12 @@ export function BrainPanel() {
               {Math.floor(brain.xp)} / {brain.xpToNext}
             </span>
           </div>
-          <div className="xp-bar" aria-hidden>
+          <div className={`xp-bar ${studying ? 'ticking' : ''}`} aria-hidden>
             <i style={{ width: `${xpPct}%` }} />
           </div>
           <p className="study-rate muted">
             {studying
-              ? `Auto-drilling · +${brain.studyRate.toFixed(1)} XP/s · map read ${mapRead}%`
+              ? `${STUDY_LINES[lessonIdx]} · +${brain.studyRate.toFixed(1)} XP/s · focus ${weakest.label}`
               : matchPhase === 'live'
                 ? `Learning from live plays · map read ${mapRead}%`
                 : `Study paused · map read ${mapRead}%`}

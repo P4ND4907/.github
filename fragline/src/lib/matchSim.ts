@@ -25,10 +25,43 @@ import type {
   MatchPlayer,
   MatchState,
   Player,
+  PlayerRole,
   TacticalBrain,
   Team,
   Upgrade,
 } from '../types'
+
+let fxSeq = 0
+function nextFxId(prefix = 'fx') {
+  fxSeq += 1
+  return `${prefix}_${fxSeq}`
+}
+
+const ENEMY_ROLES: PlayerRole[] = ['ENT', 'IGL', 'AWP', 'SUP', 'LURK']
+
+const CALLOUTS = [
+  { id: 'split_a', label: 'CALL: Split A', bias: 'a_site' },
+  { id: 'stack_b', label: 'CALL: Stack B', bias: 'b_site' },
+  { id: 'default_mid', label: 'CALL: Default mid', bias: 'mid' },
+  { id: 'lurk_flank', label: 'CALL: Lurk flank', bias: 'flank' },
+] as const
+
+function roleMods(role: PlayerRole) {
+  switch (role) {
+    case 'AWP':
+      return { range: 1.35, dmg: 1.25, aim: 1.2, hold: 1.15, speed: 0.92 }
+    case 'ENT':
+      return { range: 0.9, dmg: 1.15, aim: 0.95, hold: 0.85, speed: 1.12 }
+    case 'IGL':
+      return { range: 1.05, dmg: 0.95, aim: 1.05, hold: 1.1, speed: 1.0 }
+    case 'SUP':
+      return { range: 1.0, dmg: 0.9, aim: 1.0, hold: 1.05, speed: 1.05 }
+    case 'LURK':
+      return { range: 1.1, dmg: 1.05, aim: 1.1, hold: 1.2, speed: 0.98 }
+    default:
+      return { range: 1, dmg: 1, aim: 1, hold: 1, speed: 1 }
+  }
+}
 
 export interface MatchBuffs {
   power: number
@@ -145,6 +178,9 @@ export function createIdleMatch(excludeMapId?: string | null): MatchState {
     peakStreak: 0,
     pendingXp: 0,
     pendingLessons: [],
+    roundBanner: null,
+    bannerTime: 0,
+    callout: null,
   }
 }
 
@@ -175,38 +211,48 @@ export function startMatch(
     ),
   )
 
-  const allies: MatchPlayer[] = squad.slice(0, 5).map((p, i) =>
-    spawnPlayer(
+  const openingCall = CALLOUTS[Math.floor(Math.random() * CALLOUTS.length)]
+
+  const allies: MatchPlayer[] = squad.slice(0, 5).map((p, i) => {
+    const rm = roleMods(p.role)
+    return spawnPlayer(
       map,
       {
         id: p.id,
         squadId: p.id,
         name: p.name,
         team: 'ally',
+        role: p.role,
         maxHp: 100 + Math.floor(p.skills.clutch / 2),
-        combat: unitCombat(p),
-        speed: unitSpeed(p),
+        combat: Math.round(unitCombat(p) * (p.role === 'AWP' ? 1.08 : 1)),
+        speed: unitSpeed(p) * rm.speed,
       },
       map.allySpawns[i] ?? map.allySpawns[0],
-    ),
-  )
+    )
+  })
 
   const enemyNames = ['nyx', 'volt', 'shade', 'hexor', 'riptide']
-  const enemies: MatchPlayer[] = enemyNames.map((name, i) =>
-    spawnPlayer(
+  const enemies: MatchPlayer[] = enemyNames.map((name, i) => {
+    const role = ENEMY_ROLES[i] ?? 'ENT'
+    const rm = roleMods(role)
+    return spawnPlayer(
       map,
       {
         id: `e_${i}`,
         squadId: null,
         name,
         team: 'enemy',
+        role,
         maxHp: 100,
-        combat: enemyCombat(i) + Math.floor(opponent.power / 80),
-        speed: 1 + Math.random() * 0.25,
+        combat: Math.round(
+          (enemyCombat(i) + Math.floor(opponent.power / 80)) *
+            (role === 'AWP' ? 1.1 : 1),
+        ),
+        speed: (1 + Math.random() * 0.25) * rm.speed,
       },
       map.enemySpawns[i] ?? map.enemySpawns[0],
-    ),
-  )
+    )
+  })
 
   const iqLine = brain
     ? `Squad IQ ${brain.iq} · map read ${Math.round(fam)}%`
@@ -227,6 +273,7 @@ export function startMatch(
       `MAP → ${map.name}`,
       `vs ${opponent.name}`,
       iqLine,
+      openingCall.label,
       describeBuffs(buffs),
       'Tap a green unit, then tap the map to move',
     ],
@@ -241,6 +288,9 @@ export function startMatch(
     peakStreak: 0,
     pendingXp: 0,
     pendingLessons: [],
+    roundBanner: openingCall.label,
+    bannerTime: 2.4,
+    callout: openingCall.id,
   }
 }
 
@@ -340,10 +390,12 @@ export function syncAllyStats(state: MatchState, squad: Player[]): MatchState {
       const combat = unitCombat(p)
       const speed = unitSpeed(p)
       const maxHp = 100 + Math.floor(p.skills.clutch / 2)
+      const rm = roleMods(p.role)
       return {
         ...mp,
+        role: p.role,
         combat,
-        speed,
+        speed: speed * rm.speed,
         maxHp,
         hp: mp.alive ? Math.min(mp.hp + 8, maxHp) : mp.hp,
         name: p.name,
@@ -360,17 +412,46 @@ function pickDestination(
   foes?: MatchPlayer[],
   allies?: MatchPlayer[],
   mapFam = 0,
+  callout: string | null = null,
 ): GridPoint {
   // Learned map memory → prefer known hold/flank routes
   const memoryBias = mapFam / 100
+  const rm = roleMods(p.role ?? 'ENT')
 
-  // Hold angles when defending — strategy + learned holds
+  // IGL callout bias — signature FRAGLINE round order
+  if (p.team === 'ally' && callout && Math.random() < 0.55) {
+    if (callout === 'split_a' || callout === 'stack_b') {
+      const site = callout === 'split_a' ? 'A' : 'B'
+      const z = map.zones.find((zone) => zone.site === site)
+      if (z) return { col: z.col, row: z.row }
+    }
+    if (callout === 'lurk_flank' && (p.role === 'LURK' || Math.random() < 0.5)) {
+      if (map.flankZones.length) {
+        const z = zoneById(
+          map,
+          map.flankZones[Math.floor(Math.random() * map.flankZones.length)],
+        )
+        return { col: z.col, row: z.row }
+      }
+    }
+    if (callout === 'default_mid') {
+      const mid =
+        map.zones.find((z) => /mid|courtyard|bridge/i.test(z.id)) ??
+        map.zones.find((z) => !z.site)
+      if (mid) return { col: mid.col, row: mid.row }
+    }
+  }
+
+  // Hold angles when defending — strategy + learned holds + role
   const wantHold =
     p.team === 'ally'
       ? winChance < 48 + buffs.strategy + memoryBias * 8
       : winChance > 52 - buffs.strategy
 
-  if (wantHold && Math.random() < 0.14 + buffs.strategy * 0.03 + memoryBias * 0.12) {
+  if (
+    wantHold &&
+    Math.random() < (0.14 + buffs.strategy * 0.03 + memoryBias * 0.12) * rm.hold
+  ) {
     const pool = p.team === 'ally' ? map.allyHold : map.enemyHold
     const candidates = pool
       .map((id) => zoneById(map, id))
@@ -463,6 +544,7 @@ function retarget(
   foes?: MatchPlayer[],
   allies?: MatchPlayer[],
   mapFam = 0,
+  callout: string | null = null,
 ): MatchPlayer {
   if (!p.alive) return p
 
@@ -473,7 +555,8 @@ function retarget(
   }
 
   // Engaging a visible foe — hold the angle, don't slingshot away
-  const engageRange = 24 + buffs.utility * 3
+  const rm = roleMods(p.role ?? 'ENT')
+  const engageRange = (24 + buffs.utility * 3) * rm.range
   const visibleFoe = (foes ?? []).find(
     (f) =>
       f.alive &&
@@ -525,7 +608,7 @@ function retarget(
   return assignRoamPath(
     map,
     next,
-    pickDestination(map, next, winChance, buffs, foes, allies, mapFam),
+    pickDestination(map, next, winChance, buffs, foes, allies, mapFam, callout),
   )
 }
 
@@ -665,6 +748,9 @@ export function tickMatch(
   let round = state.round
   let allyScore = state.allyScore
   let enemyScore = state.enemyScore
+  let bannerTime = Math.max(0, (state.bannerTime ?? 0) - dt)
+  let roundBanner = bannerTime > 0 ? state.roundBanner : null
+  let callout = state.callout ?? null
   let players = state.players.map((p) => {
     const foes = state.players.filter(
       (o) => o.team !== p.team && o.alive,
@@ -673,7 +759,7 @@ export function tickMatch(
       (o) => o.team === p.team && o.alive && o.id !== p.id,
     )
     const moved = moveToward(
-      retarget(map, p, state.winChance, buffs, dt, foes, allies, mapFam),
+      retarget(map, p, state.winChance, buffs, dt, foes, allies, mapFam, callout),
       teamSpeed,
       dt,
     )
@@ -818,8 +904,8 @@ export function tickMatch(
   }
 
   // Purposeful gunfights — each unit aims at a locked target, then fires
-  const aimNeeded = Math.max(0.28, 0.55 - buffs.reflex * 0.03)
-  const engageRange = 24 + buffs.utility * 3
+  const baseAimNeeded = Math.max(0.28, 0.55 - buffs.reflex * 0.03)
+  const baseEngage = 24 + buffs.utility * 3
   {
     const byId = new Map(players.map((p) => [p.id, p]))
     const shots: {
@@ -832,6 +918,9 @@ export function tickMatch(
     for (const shooter of players) {
       if (!shooter.alive) continue
       if ((shooter.fireCooldown ?? 0) > 0) continue
+      const rm = roleMods(shooter.role ?? 'ENT')
+      const aimNeeded = baseAimNeeded / rm.aim
+      const engageRange = baseEngage * rm.range
       if (!shooter.aimTargetId || (shooter.aimTime ?? 0) < aimNeeded) continue
       const target = byId.get(shooter.aimTargetId)
       if (!target?.alive || target.team === shooter.team) {
@@ -862,14 +951,12 @@ export function tickMatch(
       )
       const hit = Math.random() * 100 < hitChance
       if (!hit) {
-        // Miss — reset aim a bit, still show a tracer past the target
         const overshoot = 4 + Math.random() * 6
         const ang = Math.atan2(target.y - shooter.y, target.x - shooter.x)
         const missX = target.x + Math.cos(ang) * overshoot + (Math.random() * 6 - 3)
         const missY = target.y + Math.sin(ang) * overshoot + (Math.random() * 6 - 3)
-        const shotId = `fx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
         fx.push({
-          id: `${shotId}_shot`,
+          id: nextFxId('shot'),
           kind: 'shot',
           fromX: shooter.x,
           fromY: shooter.y,
@@ -889,11 +976,12 @@ export function tickMatch(
               }
             : p,
         )
-        events.push(`${shooter.name} missed ${target.name}`)
         continue
       }
 
-      const dmg = 22 + buffs.power * 3 + Math.floor(Math.random() * 14)
+      const dmg = Math.round(
+        (22 + buffs.power * 3 + Math.floor(Math.random() * 14)) * rm.dmg,
+      )
       shots.push({
         shooterId: shooter.id,
         targetId: target.id,
@@ -907,9 +995,8 @@ export function tickMatch(
       const target = players.find((p) => p.id === shot.targetId)
       if (!shooter?.alive || !target?.alive) continue
 
-      const shotId = `fx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
       fx.push({
-        id: `${shotId}_shot`,
+        id: nextFxId('shot'),
         kind: 'shot',
         fromX: shooter.x,
         fromY: shooter.y,
@@ -920,15 +1007,15 @@ export function tickMatch(
         maxLife: 0.26,
       })
       fx.push({
-        id: `${shotId}_hit`,
+        id: nextFxId('hit'),
         kind: shot.willKill ? 'kill' : 'hit',
         fromX: shooter.x,
         fromY: shooter.y,
         toX: target.x,
         toY: target.y,
         team: shooter.team,
-        life: shot.willKill ? 0.5 : 0.32,
-        maxLife: shot.willKill ? 0.5 : 0.32,
+        life: shot.willKill ? 0.9 : 0.32,
+        maxLife: shot.willKill ? 0.9 : 0.32,
       })
 
       players = players.map((p) => {
@@ -938,7 +1025,6 @@ export function tickMatch(
             firingTime: 0.2,
             fireCooldown: 0.65 + Math.random() * 0.3,
             aimTime: 0,
-            // Keep lock if target survives for follow-up
             aimTargetId: shot.willKill ? null : p.aimTargetId,
           }
         }
@@ -959,21 +1045,64 @@ export function tickMatch(
           const payout = 1200 + shot.dmg * 18 + streakBonus
           pendingCash += payout
           pendingXp += 2.5 + fragStreak * 0.6
-          events.push(
+          const cashLabel =
             fragStreak >= 2
-              ? `+$${Math.round(payout / 100) / 10}K · ${fragStreak}x streak`
-              : `+$${Math.round(payout / 100) / 10}K frag`,
-          )
+              ? `${fragStreak}x +$${Math.round(payout / 100) / 10}K`
+              : `+$${Math.round(payout / 100) / 10}K`
+          fx.push({
+            id: nextFxId('float'),
+            kind: 'float',
+            fromX: target.x,
+            fromY: target.y,
+            toX: target.x,
+            toY: target.y - 8,
+            team: 'ally',
+            life: 1.15,
+            maxLife: 1.15,
+            label: 'FRAG',
+            amount: payout,
+          })
+          fx.push({
+            id: nextFxId('cash'),
+            kind: 'float',
+            fromX: target.x + 2,
+            fromY: target.y - 2,
+            toX: target.x + 2,
+            toY: target.y - 12,
+            team: 'ally',
+            life: 1.25,
+            maxLife: 1.25,
+            label: cashLabel,
+          })
+          events.push(cashLabel)
+          if (fragStreak >= 5) {
+            roundBanner = 'ACE'
+            bannerTime = 1.6
+            events.push('ACE — clean round')
+          } else if (
+            players.filter((p) => p.alive && p.team === 'ally').length === 1
+          ) {
+            roundBanner = 'CLUTCH TIME'
+            bannerTime = 1.4
+          }
         } else {
           fragStreak = 0
+          fx.push({
+            id: nextFxId('float'),
+            kind: 'float',
+            fromX: target.x,
+            fromY: target.y,
+            toX: target.x,
+            toY: target.y - 8,
+            team: 'enemy',
+            life: 0.9,
+            maxLife: 0.9,
+            label: 'DOWN',
+          })
         }
-      } else {
-        events.push(`${shooter.name} hit ${target.name} (−${shot.dmg})`)
       }
     }
   }
-
-  fx = fx.slice(-18)
 
   const alliesAlive = players.filter((p) => p.alive && p.team === 'ally').length
   const enemiesAlive = players.filter((p) => p.alive && p.team === 'enemy').length
@@ -981,22 +1110,29 @@ export function tickMatch(
 
   if (roundOver) {
     const sitePressure = buffs.strategy * 0.06
+    // Time-up favors the side with more alive (site control proxy)
     const allyWonRound =
       enemiesAlive === 0 ||
-      (alliesAlive > 0 &&
-        timeLeft <= 0 &&
-        Math.random() * 100 < state.winChance + buffs.clutch * 3.5) ||
-      (alliesAlive > enemiesAlive && Math.random() < 0.48 + sitePressure)
+      (alliesAlive > 0 && enemiesAlive === 0) ||
+      (timeLeft <= 0 && alliesAlive > enemiesAlive) ||
+      (timeLeft <= 0 &&
+        alliesAlive === enemiesAlive &&
+        Math.random() * 100 < state.winChance + buffs.clutch * 2.5 + sitePressure * 40) ||
+      (alliesAlive > enemiesAlive && Math.random() < 0.35 + sitePressure)
 
     if (allyWonRound) {
       allyScore += 1
-      events.push(`Round ${round} won`)
+      events.push(`Round ${round} won · ${allyScore}–${enemyScore}`)
       pendingXp += 8
+      roundBanner = `ROUND WON  ${allyScore}–${enemyScore}`
+      bannerTime = 1.8
       if (Math.random() < 0.45) pendingLessons.push('Round win locked into playbook')
     } else {
       enemyScore += 1
-      events.push(`Round ${round} lost`)
+      events.push(`Round ${round} lost · ${allyScore}–${enemyScore}`)
       pendingXp += 4
+      roundBanner = `ROUND LOST  ${allyScore}–${enemyScore}`
+      bannerTime = 1.8
       if (Math.random() < 0.5) pendingLessons.push('Adjusting holds after round loss')
     }
 
@@ -1020,19 +1156,30 @@ export function tickMatch(
         orderMarker: null,
         fx: [],
         gadgets: [],
-        pendingCash: 0,
+        pendingCash, // keep final-tick frag payouts
         fragStreak: 0,
         peakStreak,
         pendingXp,
         pendingLessons,
+        roundBanner:
+          result === 'win' ? 'MATCH WON' : result === 'draw' ? 'DRAW' : 'MATCH LOST',
+        bannerTime: 2.2,
+        callout: null,
       }
     }
 
+    const nextCall = CALLOUTS[Math.floor(Math.random() * CALLOUTS.length)]
+    callout = nextCall.id
+    roundBanner = `${roundBanner ?? 'ROUND'} · ${nextCall.label}`
+    bannerTime = 2.2
+
     timeLeft = 70
     orderMarker = null
-    fx = []
+    // Keep float FX briefly into next round
+    fx = fx.filter((f) => f.kind === 'float').slice(-6)
     gadgets = []
-    fragStreak = 0
+    // Keep match streak dopamine — only soft decay
+    fragStreak = Math.max(0, fragStreak - 1)
     players = players.map((p, _i, all) => {
       const spawns = p.team === 'ally' ? map.allySpawns : map.enemySpawns
       const idx = all.filter((x) => x.team === p.team).findIndex((x) => x.id === p.id)
@@ -1043,6 +1190,7 @@ export function tickMatch(
           squadId: p.squadId,
           name: p.name,
           team: p.team,
+          role: p.role ?? 'ENT',
           maxHp: p.maxHp,
           combat: p.combat,
           speed: p.speed,
@@ -1059,24 +1207,8 @@ export function tickMatch(
     Math.min(92, state.winChance + aliveFactor * 0.05 * dt),
   )
 
-  // Live data pulse for the match feed (~every 2s)
-  const pulse = Math.floor(timeLeft / 2)
-  const prevPulse = Math.floor(state.timeLeft / 2)
-  if (pulse !== prevPulse) {
-    const jammed = players.filter((p) => p.alive && (p.stuckTime ?? 0) > 0.25).length
-    const moving = players.filter((p) => {
-      if (!p.alive) return false
-      return (
-        p.waypoints.length > 0 ||
-        Math.hypot(p.targetX - p.x, p.targetY - p.y) > 1.5
-      )
-    }).length
-    const clays = gadgets.filter((g) => g.kind === 'claymore').length
-    const nades = gadgets.filter((g) => g.kind === 'frag').length
-    events.push(
-      `LIVE · ${moving} moving · ${jammed} jammed · ${clays} clay · ${nades} nade`,
-    )
-  }
+  // Priority feed only — kill/round/callouts (telemetry lives in HUD chips)
+  const priority = events.filter((e) => !e.startsWith('LIVE'))
 
   return {
     ...state,
@@ -1086,15 +1218,18 @@ export function tickMatch(
     timeLeft,
     winChance: Math.round(winChance),
     players,
-    events: events.slice(-10),
+    events: priority.slice(-8),
     orderMarker,
-    fx,
+    fx: fx.slice(-24),
     gadgets,
     pendingCash,
     fragStreak,
     peakStreak,
     pendingXp,
     pendingLessons,
+    roundBanner,
+    bannerTime,
+    callout,
   }
 }
 
@@ -1111,6 +1246,7 @@ export function idlePreviewPlayers(map: GameMap): MatchPlayer[] {
     name: string,
     team: 'ally' | 'enemy',
     zoneId: string,
+    role: PlayerRole = 'ENT',
   ): MatchPlayer => {
     const z = zoneById(map, zoneId)
     return {
@@ -1118,6 +1254,7 @@ export function idlePreviewPlayers(map: GameMap): MatchPlayer[] {
       squadId: null,
       name,
       team,
+      role,
       x: z.x,
       y: z.y,
       alive: true,
