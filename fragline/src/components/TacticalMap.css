@@ -373,6 +373,27 @@
   fill: #e8c547;
 }
 
+.pawn.clutch .pawn-glow {
+  fill: rgba(232, 197, 71, 0.28);
+  stroke: #e8c547;
+  stroke-width: 1.1;
+  animation: clutch-pulse 0.7s ease-in-out infinite alternate;
+}
+
+.pawn.clutch .pawn-body {
+  stroke: #e8c547;
+  stroke-width: 1.6;
+}
+
+@keyframes clutch-pulse {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .hp-bg {
   fill: rgba(0, 0, 0, 0.55);
 }

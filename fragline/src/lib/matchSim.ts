@@ -265,6 +265,16 @@ export function startMatch(
     ? `Squad IQ ${brain.iq} · map read ${Math.round(fam)}%`
     : 'Squad IQ warming up'
 
+  const rivalStrats = [
+    'Rival strat: default mid → B',
+    'Rival strat: A executes',
+    'Rival strat: stack retake',
+    'Rival strat: lurk contact',
+    'Rival strat: utility take',
+  ]
+  const rivalStrat =
+    rivalStrats[Math.abs(opponent.power + opponent.name.length) % rivalStrats.length]
+
   return {
     phase: 'live',
     round: 1,
@@ -280,6 +290,7 @@ export function startMatch(
       `MAP → ${map.name}`,
       `vs ${opponent.name}`,
       iqLine,
+      rivalStrat,
       openingCall.label,
       describeBuffs(buffs),
       'Tap a green unit, then tap the map to move',
@@ -809,7 +820,9 @@ export function tickMatch(
     : buffsFromUpgrades(upgrades)
   const mapFam = brain ? mapFamiliarity(brain, state.mapId) : 0
   // Steady pace — no slingshot sprinting across the arena
-  const teamSpeed = 9.5 + buffs.reflex * 1.4
+  const alliesAliveNow = state.players.filter((p) => p.alive && p.team === 'ally').length
+  const clutchMode = alliesAliveNow === 1
+  const teamSpeed = 9.5 + buffs.reflex * 1.4 + (clutchMode ? 1.8 + buffs.clutch * 0.4 : 0)
 
   let timeLeft = state.timeLeft - dt
   let round = state.round

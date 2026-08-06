@@ -513,7 +513,13 @@ export function TacticalMap({
                   p.id === selectedUnitId ? 'selected' : ''
                 } ${p.orderedTime > 0 ? 'ordered' : ''} ${
                   p.firingTime > 0 ? 'firing' : ''
-                } ${aiming ? 'aiming' : ''}`}
+                } ${aiming ? 'aiming' : ''} ${
+                  p.team === 'ally' &&
+                  p.alive &&
+                  players.filter((x) => x.team === 'ally' && x.alive).length === 1
+                    ? 'clutch'
+                    : ''
+                }`}
                 transform={`translate(${pos.x} ${pos.y})`}
               >
                 {/* Operator silhouette — not a plain orb */}
