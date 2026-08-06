@@ -73,7 +73,7 @@ export type MatchPhase = 'idle' | 'live' | 'result'
 
 export interface CombatFx {
   id: string
-  kind: 'shot' | 'hit' | 'kill' | 'nade' | 'claymore' | 'float'
+  kind: 'shot' | 'hit' | 'kill' | 'nade' | 'claymore' | 'float' | 'smoke'
   fromX: number
   fromY: number
   toX: number
@@ -177,6 +177,10 @@ export interface MatchState {
   siteControl: number
   /** Contested site label for HUD */
   hotSite: 'A' | 'B' | null
+  /** 0–100 plant progress when controlling a site */
+  plantProgress: number
+  /** Bomb is down — short fuse round */
+  bombPlanted: boolean
 }
 
 export interface GameState {

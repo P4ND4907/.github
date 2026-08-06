@@ -222,6 +222,17 @@
   fill: #f0d060;
 }
 
+.gadget-smoke .smoke-cloud,
+.fx-smoke-pop .smoke-cloud {
+  fill: rgba(180, 175, 165, 0.45);
+  stroke: rgba(220, 215, 200, 0.25);
+  stroke-width: 0.6;
+}
+
+.gadget-smoke .smoke-core {
+  fill: rgba(120, 115, 105, 0.35);
+}
+
 .order-marker circle {
   fill: none;
   stroke: #e8c547;

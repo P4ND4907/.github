@@ -447,6 +447,8 @@ export const useGameStore = create<GameStore>()(
                 ...s.match.events,
                 `${upgrade.name} ONLINE · Lv.${nextLevel}`,
               ].slice(-10),
+              roundBanner: `${upgrade.name.toUpperCase()} ONLINE`,
+              bannerTime: 1.35,
             }
           : s.match
         set({

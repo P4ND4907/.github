@@ -362,6 +362,20 @@ export function TacticalMap({
                 </g>
               )
             }
+            if (g.kind === 'smoke') {
+              const life = Math.max(0.25, Math.min(1, g.fuse / 7.5))
+              return (
+                <g
+                  key={g.id}
+                  className="gadget-smoke"
+                  transform={`translate(${g.x} ${g.y})`}
+                  opacity={0.35 + life * 0.35}
+                >
+                  <circle r={9 + (1 - life) * 3} className="smoke-cloud" />
+                  <circle r={5.5} className="smoke-core" />
+                </g>
+              )
+            }
             return null
           })}
         </g>
@@ -454,6 +468,20 @@ export function TacticalMap({
                 >
                   <circle r={2.2 * scale} className="fx-hit-ring" />
                   <circle r={0.9 * scale} className="fx-hit-core" />
+                </g>
+              )
+            }
+
+            if (f.kind === 'smoke') {
+              const scale = 0.8 + (1 - t) * 1.8
+              return (
+                <g
+                  key={f.id}
+                  className="fx-smoke-pop"
+                  transform={`translate(${f.toX} ${f.toY})`}
+                  opacity={t}
+                >
+                  <circle r={4 * scale} className="smoke-cloud" />
                 </g>
               )
             }

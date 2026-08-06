@@ -13,15 +13,18 @@ import {
   type GridPoint,
 } from '../data/map'
 import {
+  canSeeThrough,
   isGoodAngleHold,
   placeClaymore,
   throwFrag,
+  throwSmoke,
   tickGadgets,
   trySpotClaymores,
 } from './gadgets'
 import { buffsWithBrain, mapFamiliarity } from './learning'
 import type {
   CombatFx,
+  Gadget,
   MatchPlayer,
   MatchState,
   Player,
@@ -183,6 +186,8 @@ export function createIdleMatch(excludeMapId?: string | null): MatchState {
     callout: null,
     siteControl: 50,
     hotSite: null,
+    plantProgress: 0,
+    bombPlanted: false,
   }
 }
 
@@ -295,6 +300,8 @@ export function startMatch(
     callout: openingCall.id,
     siteControl: 50,
     hotSite: null,
+    plantProgress: 0,
+    bombPlanted: false,
   }
 }
 
@@ -579,6 +586,7 @@ function retarget(
   allies?: MatchPlayer[],
   mapFam = 0,
   callout: string | null = null,
+  gadgets: Gadget[] = [],
 ): MatchPlayer {
   if (!p.alive) return p
 
@@ -595,7 +603,7 @@ function retarget(
     (f) =>
       f.alive &&
       Math.hypot(f.x - next.x, f.y - next.y) < engageRange &&
-      hasLineOfSight(map, next.x, next.y, f.x, f.y),
+      canSeeThrough(map, gadgets, next.x, next.y, f.x, f.y),
   )
   if (visibleFoe) {
     return {
@@ -793,7 +801,18 @@ export function tickMatch(
       (o) => o.team === p.team && o.alive && o.id !== p.id,
     )
     const moved = moveToward(
-      retarget(map, p, state.winChance, buffs, dt, foes, allies, mapFam, callout),
+      retarget(
+        map,
+        p,
+        state.winChance,
+        buffs,
+        dt,
+        foes,
+        allies,
+        mapFam,
+        callout,
+        state.gadgets ?? [],
+      ),
       teamSpeed,
       dt,
     )
@@ -858,6 +877,28 @@ export function tickMatch(
         if (p.team === 'ally') {
           events.push(`${p.name} planted claymore`)
           pendingXp += 2.2
+        }
+      }
+    }
+
+
+    if (Math.random() < ((p.role === 'SUP' ? 0.07 : 0.025) + util * 0.015) * dt) {
+      const foes = players.filter((o) => o.team !== p.team && o.alive)
+      if (foes.length) {
+        const nearest = foes.reduce((best, f) =>
+          Math.hypot(f.x - p.x, f.y - p.y) < Math.hypot(best.x - p.x, best.y - p.y)
+            ? f
+            : best,
+        )
+        const d = Math.hypot(nearest.x - p.x, nearest.y - p.y)
+        if (d > 10 && d < 48) {
+          const thrown = throwSmoke(p, (p.x + nearest.x) / 2, (p.y + nearest.y) / 2)
+          gadgets = [...gadgets, thrown.gadget]
+          fx = [...fx, thrown.fx]
+          if (p.team === 'ally') {
+            events.push(`${p.name} smoked the lane`)
+            pendingXp += 1.8
+          }
         }
       }
     }
@@ -964,7 +1005,10 @@ export function tickMatch(
         continue
       }
       const d = Math.hypot(target.x - shooter.x, target.y - shooter.y)
-      if (d > engageRange + 2 || !hasLineOfSight(map, shooter.x, shooter.y, target.x, target.y)) {
+      if (
+        d > engageRange + 2 ||
+        !canSeeThrough(map, gadgets, shooter.x, shooter.y, target.x, target.y)
+      ) {
         players = players.map((p) =>
           p.id === shooter.id ? { ...p, aimTargetId: null, aimTime: 0 } : p,
         )
@@ -1172,17 +1216,74 @@ export function tickMatch(
     }
   }
 
-  const roundOver = timeLeft <= 0 || alliesAlive === 0 || enemiesAlive === 0
+  let plantProgress = state.plantProgress ?? 0
+  let bombPlanted = state.bombPlanted ?? false
+  {
+    const siteZone = hotSite
+      ? map.zones.find((z) => z.site === hotSite)
+      : null
+    if (siteZone && !bombPlanted) {
+      const planters = players.filter(
+        (p) =>
+          p.alive &&
+          p.team === 'ally' &&
+          Math.hypot(p.x - siteZone.x, p.y - siteZone.y) < 14,
+      ).length
+      const defenders = players.filter(
+        (p) =>
+          p.alive &&
+          p.team === 'enemy' &&
+          Math.hypot(p.x - siteZone.x, p.y - siteZone.y) < 14,
+      ).length
+      if (planters > 0 && siteControl >= 58 && planters >= defenders) {
+        plantProgress = Math.min(100, plantProgress + (12 + planters * 6) * dt)
+        if (plantProgress >= 100) {
+          bombPlanted = true
+          plantProgress = 100
+          timeLeft = Math.min(timeLeft, 28)
+          roundBanner = `BOMB PLANTED · ${hotSite}`
+          bannerTime = 1.8
+          events.push(`Bomb planted on ${hotSite}`)
+          pendingXp += 10
+          pendingCash += 2200
+        }
+      } else if (defenders > planters) {
+        plantProgress = Math.max(0, plantProgress - 18 * dt)
+      }
+    } else if (bombPlanted && siteZone) {
+      const defusers = players.filter(
+        (p) =>
+          p.alive &&
+          p.team === 'enemy' &&
+          Math.hypot(p.x - siteZone.x, p.y - siteZone.y) < 12,
+      ).length
+      if (defusers > 0) {
+        plantProgress = Math.max(0, plantProgress - 22 * dt)
+        if (plantProgress <= 0) {
+          bombPlanted = false
+          roundBanner = 'BOMB DEFUSED'
+          bannerTime = 1.5
+          events.push('Bomb defused')
+        }
+      }
+    }
+  }
+
+  const roundOver =
+    timeLeft <= 0 ||
+    alliesAlive === 0 ||
+    enemiesAlive === 0 ||
+    (bombPlanted && timeLeft <= 0)
 
   if (roundOver) {
     const sitePressure = buffs.strategy * 0.06
     // Time-up: site control decides (not a coin flip)
     const allyWonRound =
       enemiesAlive === 0 ||
-      (timeLeft <= 0 && siteControl >= 55) ||
+      (bombPlanted && timeLeft <= 0 && alliesAlive > 0) ||
+      (!bombPlanted && timeLeft <= 0 && siteControl >= 55) ||
       (timeLeft <= 0 && siteControl > 45 && alliesAlive > enemiesAlive) ||
-      (alliesAlive > 0 && enemiesAlive === 0) ||
-      (alliesAlive > enemiesAlive && Math.random() < 0.22 + sitePressure)
+      (alliesAlive > enemiesAlive && Math.random() < 0.18 + sitePressure)
 
     if (allyWonRound) {
       allyScore += 1
@@ -1231,6 +1332,8 @@ export function tickMatch(
         callout: null,
         siteControl,
         hotSite,
+        plantProgress,
+        bombPlanted,
       }
     }
 
@@ -1240,6 +1343,8 @@ export function tickMatch(
     bannerTime = 2.2
     siteControl = 50
     hotSite = null
+    plantProgress = 0
+    bombPlanted = false
 
     timeLeft = 70
     orderMarker = null
@@ -1300,6 +1405,8 @@ export function tickMatch(
     callout,
     siteControl,
     hotSite,
+    plantProgress,
+    bombPlanted,
   }
 }
 
@@ -1310,30 +1417,34 @@ export function formatClock(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export function idlePreviewPlayers(map: GameMap): MatchPlayer[] {
+export function idlePreviewPlayers(map: GameMap, t = 0): MatchPlayer[] {
   const mk = (
     id: string,
     name: string,
     team: 'ally' | 'enemy',
     zoneId: string,
-    role: PlayerRole = 'ENT',
+    role: PlayerRole,
+    phase: number,
   ): MatchPlayer => {
     const z = zoneById(map, zoneId)
+    // Soft ghost drift for idle VOD fantasy
+    const drift = Math.sin(t * 0.7 + phase) * 3.2
+    const driftY = Math.cos(t * 0.55 + phase) * 2.4
     return {
       id,
       squadId: null,
       name,
       team,
       role,
-      x: z.x,
-      y: z.y,
+      x: z.x + drift,
+      y: z.y + driftY,
       alive: true,
       hp: 100,
       maxHp: 100,
       combat: 50,
       speed: 1,
-      targetX: z.x,
-      targetY: z.y,
+      targetX: z.x + drift,
+      targetY: z.y + driftY,
       waypoints: [],
       orderedTime: 0,
       firingTime: 0,
@@ -1344,8 +1455,13 @@ export function idlePreviewPlayers(map: GameMap): MatchPlayer[] {
       fireCooldown: 0,
     }
   }
+  const roles: PlayerRole[] = ['ENT', 'IGL', 'AWP', 'SUP']
   return [
-    ...map.allySpawns.slice(0, 2).map((id, i) => mk(`preview_a${i}`, 'ready', 'ally', id)),
-    ...map.enemySpawns.slice(0, 2).map((id, i) => mk(`preview_e${i}`, 'wait', 'enemy', id)),
+    ...map.allySpawns.slice(0, 3).map((id, i) =>
+      mk(`preview_a${i}`, 'ghost', 'ally', id, roles[i] ?? 'ENT', i * 1.2),
+    ),
+    ...map.enemySpawns.slice(0, 3).map((id, i) =>
+      mk(`preview_e${i}`, 'rival', 'enemy', id, roles[i] ?? 'LURK', i * 1.4 + 2),
+    ),
   ]
 }

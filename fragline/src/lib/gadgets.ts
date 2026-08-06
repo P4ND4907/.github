@@ -107,6 +107,75 @@ export function throwFrag(
   }
 }
 
+/** Soft vision denial — fuse counts down remaining smoke life */
+export function throwSmoke(
+  thrower: MatchPlayer,
+  targetX: number,
+  targetY: number,
+): { gadget: Gadget; fx: CombatFx } {
+  const tx = targetX + (Math.random() * 4 - 2)
+  const ty = targetY + (Math.random() * 4 - 2)
+  return {
+    gadget: {
+      id: makeGadgetId(),
+      kind: 'smoke',
+      team: thrower.team,
+      x: tx,
+      y: ty,
+      facing: 0,
+      fuse: 7.5,
+      spotted: true,
+      ownerId: thrower.id,
+    },
+    fx: {
+      id: `fx_smoke_${Date.now()}_${gadgetSeq}`,
+      kind: 'smoke',
+      fromX: thrower.x,
+      fromY: thrower.y,
+      toX: tx,
+      toY: ty,
+      team: thrower.team,
+      life: 0.7,
+      maxLife: 0.7,
+    },
+  }
+}
+
+/** True if vision between two points is denied by an active smoke cloud */
+export function visionBlockedBySmoke(
+  gadgets: Gadget[],
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): boolean {
+  const smokes = gadgets.filter((g) => g.kind === 'smoke' && g.fuse > 0)
+  if (!smokes.length) return false
+  for (const s of smokes) {
+    const r = 11
+    // Block if either end is inside the cloud or the segment passes near center
+    if (Math.hypot(x1 - s.x, y1 - s.y) < r) return true
+    if (Math.hypot(x2 - s.x, y2 - s.y) < r) return true
+    const mx = (x1 + x2) / 2
+    const my = (y1 + y2) / 2
+    if (Math.hypot(mx - s.x, my - s.y) < r * 0.85) return true
+  }
+  return false
+}
+
+export function canSeeThrough(
+  map: GameMap,
+  gadgets: Gadget[],
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): boolean {
+  if (!hasLineOfSight(map, x1, y1, x2, y2)) return false
+  if (visionBlockedBySmoke(gadgets, x1, y1, x2, y2)) return false
+  return true
+}
+
 export function tickGadgets(
   map: GameMap,
   gadgets: Gadget[],
@@ -213,6 +282,15 @@ export function tickGadgets(
         continue
       }
       kept.push(armed)
+      continue
+    }
+
+    if (g.kind === 'smoke') {
+      if (fuse > 0) {
+        kept.push({ ...g, fuse })
+        continue
+      }
+      // Cloud expired
       continue
     }
 

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { SKILL_LABELS } from '../data/names'
 import { getMap } from '../data/map'
 import {
@@ -48,7 +49,20 @@ export function MatchPanel() {
   const live = match.phase === 'live'
   const done = match.phase === 'result'
   const map = getMap(match.mapId)
-  const previewPlayers = idlePreviewPlayers(map)
+  const [idleT, setIdleT] = useState(0)
+  useEffect(() => {
+    if (match.phase !== 'idle') return
+    let raf = 0
+    let last = performance.now()
+    const tick = (now: number) => {
+      setIdleT((t) => t + Math.min(0.05, (now - last) / 1000))
+      last = now
+      raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [match.phase])
+  const previewPlayers = idlePreviewPlayers(map, idleT)
   const brainBuffs = buffsWithBrain(buffsFromUpgrades(upgrades), brain)
 
   const selected =
@@ -160,13 +174,23 @@ export function MatchPanel() {
                   ? 'enemy'
                   : ''
             }`}
-            title="Site control — time-up winner"
+            title="Site CONTROL — who wins if the clock hits zero"
           >
-            {match.hotSite ? `${match.hotSite}-SITE` : 'MID'}{' '}
-            {Math.round(match.siteControl ?? 50)}%
+            CTRL {match.hotSite ?? '·'} {Math.round(match.siteControl ?? 50)}%
           </div>
         )}
       </div>
+
+      {live && ((match.plantProgress ?? 0) > 2 || match.bombPlanted) && (
+        <div className={`plant-bar ${match.bombPlanted ? 'planted' : ''}`}>
+          <span>
+            {match.bombPlanted
+              ? `BOMB · ${match.hotSite ?? 'SITE'} LIVE`
+              : `PLANTING ${match.hotSite ?? 'SITE'}…`}
+          </span>
+          <i style={{ width: `${Math.round(match.plantProgress ?? 0)}%` }} />
+        </div>
+      )}
 
       {match.phase === 'idle' ? (
         <div className="map-placeholder">
@@ -199,35 +223,46 @@ export function MatchPanel() {
         </div>
       )}
 
-      {live && match.fragStreak >= 2 && (
-        <div className="streak-banner">
-          {match.fragStreak}x FRAG STREAK — keep the pressure on
+      {live && (
+        <div className="live-status-row">
+          {match.callout && (
+            <div className="callout-chip">
+              IGL · {match.callout.replace(/_/g, ' ').toUpperCase()}
+            </div>
+          )}
+          {match.fragStreak >= 2 && (
+            <div className="streak-banner compact">
+              {match.fragStreak}x STREAK
+            </div>
+          )}
         </div>
-      )}
-
-      {live && match.callout && (
-        <div className="callout-chip">IGL · {match.callout.replace(/_/g, ' ').toUpperCase()}</div>
       )}
 
       {live && (
         <div className="battle-dock">
           <div className="unit-rail">
-            {match.players
-              .filter((p) => p.team === 'ally')
+            {[...match.players.filter((p) => p.team === 'ally')]
+              .sort((a, b) => Number(b.alive) - Number(a.alive))
               .map((p) => (
                 <button
                   key={p.id}
                   className={`unit-chip ${p.id === selected?.id ? 'active' : ''} ${
                     p.alive ? '' : 'dead'
-                  }`}
+                  } ${p.orderedTime > 8 ? 'holding' : ''}`}
                   onClick={() => selectMatchUnit(p.id)}
+                  disabled={!p.alive}
                 >
                   <strong>
                     {p.name}
                     <em className="role-tag">{p.role}</em>
                   </strong>
                   <span>
-                    {p.alive ? `HP ${p.hp}` : 'DOWN'} · CBM {p.combat}
+                    {p.alive
+                      ? p.orderedTime > 8
+                        ? 'HOLDING'
+                        : `HP ${p.hp}`
+                      : 'ELIM'}{' '}
+                    · {p.combat}
                   </span>
                 </button>
               ))}
@@ -246,11 +281,14 @@ export function MatchPanel() {
                 <div className="unit-actions">
                   <button
                     type="button"
-                    className="btn btn-ghost hold-btn"
+                    className={`btn btn-ghost hold-btn ${
+                      selected.orderedTime > 8 ? 'is-holding' : ''
+                    }`}
                     disabled={!selected.alive}
                     onClick={holdSelectedUnit}
+                    title="Lock this unit on their current angle"
                   >
-                    HOLD
+                    {selected.orderedTime > 8 ? 'HOLDING' : 'HOLD ANGLE'}
                   </button>
                   <span className="pill">CBM {selected.combat}</span>
                 </div>
@@ -283,7 +321,7 @@ export function MatchPanel() {
         <ul className="match-feed">
           {match.events
             .filter((e) => !e.startsWith('LIVE'))
-            .slice(-4)
+            .slice(-7)
             .map((e, i) => (
               <li key={`${e}-${i}`}>{e}</li>
             ))}
